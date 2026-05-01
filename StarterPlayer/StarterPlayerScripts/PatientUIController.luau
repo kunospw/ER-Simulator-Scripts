@@ -9,24 +9,27 @@ local player       = Players.LocalPlayer
 local showUIRemote = RS:WaitForChild("ShowPatientUI")
 local resetCamRemote = RS:WaitForChild("ResetPatientCamera")
 
+local submitTriageRemote = RS:WaitForChild("SubmitTriage")
+local triageResultRemote = RS:WaitForChild("TriageResult")
+
 local patientTimers = {}
 
 -- ── Tooltip data ──────────────────────────────────────────────────────────────
 local TIPS = {
 	Breathing = {
-		param = "Breathing (RR)",
-		text  = "Count breaths per minute. If not breathing, open airway first.",
-		rule  = "RR > 30 → Red   ·   RR ≤ 30 → check perfusion",
+		param = "Pernapasan (RR)",
+		text  = "Hitung napas per menit. Jika tidak bernapas, buka jalan napas terlebih dahulu.",
+		rule  = "RR > 30 → Merah   ·   RR ≤ 30 → cek perfusi",
 	},
 	Perfusion = {
-		param = "Perfusion (CRT)",
-		text  = "Press fingernail 2 sec, release. Time until pink returns.",
-		rule  = "CRT > 2s → Red   ·   CRT ≤ 2s → check mental status",
+		param = "Perfusi (CRT)",
+		text  = "Tekan kuku 2 detik, lepas. Hitung waktu hingga warna merah muda kembali.",
+		rule  = "CRT > 2 detik → Merah   ·   CRT ≤ 2 detik → cek status mental",
 	},
 	Mental = {
-		param = "Mental status",
-		text  = "Ask: 'squeeze my hand' or 'open your eyes'. Can they follow?",
-		rule  = "Cannot follow → Red   ·   Can follow → Yellow",
+		param = "Status Mental",
+		text  = "Tanya: 'genggam tangan saya' atau 'buka mata'. Apakah bisa mengikuti perintah?",
+		rule  = "Tidak bisa mengikuti → Merah   ·   Bisa mengikuti → Kuning",
 	},
 }
 
@@ -110,7 +113,7 @@ local function setInfoCollapsed(collapsed)
 
 	local toggle = infoFrame:FindFirstChild("ToggleButton")
 	if toggle then
-		toggle.Text = collapsed and "▲  Pasien info" or "▼  Pasien info"
+		toggle.Text = collapsed and "▲  Info Pasien" or "▼  Info Pasien"
 	end
 
 	local body = infoFrame:FindFirstChild("InfoBody")
@@ -124,14 +127,78 @@ local function vitalColor(value, paramType)
 		elseif value >= 24 then return Color3.fromHex("FAC775")
 		else return Color3.fromHex("97C459") end
 	elseif paramType == "crt" then
-		-- Delayed = red, Normal = green
-		if value == "Delayed" then return Color3.fromHex("F09595")
+		if value == "Terlambat" then return Color3.fromHex("F09595")
 		else return Color3.fromHex("97C459") end
 	elseif paramType == "mental" then
-		if value == "Impaired" then return Color3.fromHex("F09595")
+		if value == "Terganggu" then return Color3.fromHex("F09595")
 		else return Color3.fromHex("97C459") end
 	end
 	return Color3.fromHex("FFFFFF")
+end
+
+-- ── Triage Toast ──────────────────────────────────────────────────────────────
+local function showTriageToast(isCorrect, pointsDelta)
+	local gui   = getGui()
+	local toast = gui:FindFirstChild("TriageToast")
+	if not toast then return end
+
+	local icon     = toast:FindFirstChild("PillIcon")
+	local pillText = toast:FindFirstChild("PillText")
+
+	if isCorrect then
+		toast.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
+		if icon     then icon.Text     = "✓" end
+		if pillText then pillText.Text = "+" .. pointsDelta .. " · Benar!" end
+	else
+		toast.BackgroundColor3 = Color3.fromRGB(239, 68, 68)
+		if icon     then icon.Text     = "✗" end
+		if pillText then pillText.Text = pointsDelta .. " · Salah" end
+	end
+
+	toast.Visible              = true
+	toast.BackgroundTransparency = 1
+	if icon     then icon.TextTransparency     = 1 end
+	if pillText then pillText.TextTransparency = 1 end
+
+	TweenService:Create(toast,
+		TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ BackgroundTransparency = 0.15 }
+	):Play()
+	if icon then
+		TweenService:Create(icon,
+			TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+			{ TextTransparency = 0 }
+		):Play()
+	end
+	if pillText then
+		TweenService:Create(pillText,
+			TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+			{ TextTransparency = 0 }
+		):Play()
+	end
+
+	task.delay(2, function()
+		local fadeOut = TweenService:Create(toast,
+			TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			{ BackgroundTransparency = 1 }
+		)
+		fadeOut:Play()
+		if icon then
+			TweenService:Create(icon,
+				TweenInfo.new(0.3, Enum.EasingStyle.Quad),
+				{ TextTransparency = 1 }
+			):Play()
+		end
+		if pillText then
+			TweenService:Create(pillText,
+				TweenInfo.new(0.3, Enum.EasingStyle.Quad),
+				{ TextTransparency = 1 }
+			):Play()
+		end
+		fadeOut.Completed:Connect(function()
+			toast.Visible = false
+		end)
+	end)
 end
 
 -- ── Main UI populate ──────────────────────────────────────────────────────────
@@ -149,12 +216,12 @@ showUIRemote.OnClientEvent:Connect(function(patient)
 	if scoreFrame then
 		scoreFrame.Visible = true
 		local s = scoreFrame:FindFirstChild("ScoreText")
-		if s then s.Text = "Score: " .. (player:GetAttribute("Score") or 0) end
+		if s then s.Text = "Skor: " .. (player:GetAttribute("Score") or 0) end
 	end
 	if counterFrame then
 		counterFrame.Visible = true
 		local c = counterFrame:FindFirstChild("PatientCounterText")
-		if c then c.Text = "Patients: " .. (player:GetAttribute("PatientsRemaining") or "?") end
+		if c then c.Text = "Pasien: " .. (player:GetAttribute("PatientsRemaining") or "?") end
 	end
 	if timerFrame then timerFrame.Visible = true end
 
@@ -198,12 +265,12 @@ showUIRemote.OnClientEvent:Connect(function(patient)
 				local mCard = cardRow:FindFirstChild("MentalCard")
 
 				if bCard then
-					bCard.Text = "Breathing\n" .. rrVal
+					bCard.Text = "Pernapasan\n" .. rrVal
 					bCard.TextColor3 = vitalColor(rrNum, "rr")
 					bCard.MouseButton1Click:Connect(function() showToast("Breathing") end)
 				end
 				if pCard then
-					pCard.Text = "Perfusion\n" .. perfVal
+					pCard.Text = "Perfusi\n" .. perfVal
 					pCard.TextColor3 = vitalColor(perfVal, "crt")
 					pCard.MouseButton1Click:Connect(function() showToast("Perfusion") end)
 				end
@@ -218,7 +285,42 @@ showUIRemote.OnClientEvent:Connect(function(patient)
 
 	-- ── TriageFrame ───────────────────────────────────────────────────────────
 	local triageFrame = gui:FindFirstChild("TriageFrame")
-	if triageFrame then triageFrame.Visible = true end
+	if triageFrame then
+		triageFrame.Visible = true
+
+		local patientId = patient:GetAttribute("PatientID")
+
+		-- Disconnect semua koneksi lama
+		if not triageFrame:GetAttribute("ConnectionsCleared") then
+			triageFrame:SetAttribute("ConnectionsCleared", true)
+		end
+
+		local buttons = {
+			{ name = "RedButton",    value = "RED"    },
+			{ name = "YellowButton", value = "YELLOW" },
+			{ name = "GreenButton",  value = "GREEN"  },
+			{ name = "BlackButton",  value = "BLACK"  },
+		}
+
+		-- Simpan koneksi di luar loop biar bisa di-disconnect
+		if not _G.TriageConnections then _G.TriageConnections = {} end
+
+		-- Disconnect semua koneksi lama
+		for _, conn in ipairs(_G.TriageConnections) do
+			conn:Disconnect()
+		end
+		_G.TriageConnections = {}
+
+		for _, btn in ipairs(buttons) do
+			local button = triageFrame:FindFirstChild(btn.name)
+			if button then
+				local conn = button.MouseButton1Click:Connect(function()
+					submitTriageRemote:FireServer(patientId, btn.value)
+				end)
+				table.insert(_G.TriageConnections, conn)
+			end
+		end
+	end
 
 	-- ── Toast close button ────────────────────────────────────────────────────
 	local toast = gui:FindFirstChild("ToastFrame")
@@ -286,4 +388,32 @@ showUIRemote.OnClientEvent:Connect(function(patient)
 			end
 		end
 	end)
+end)
+
+-- ── Triage Result ─────────────────────────────────────────────────────────────
+triageResultRemote.OnClientEvent:Connect(function(feedback)
+	local gui = getGui()
+	if not gui then return end
+
+	-- Update score
+	local scoreFrame = gui:FindFirstChild("ScoreFrame")
+	if scoreFrame then
+		local s = scoreFrame:FindFirstChild("ScoreText")
+		if s then s.Text = "Skor: " .. feedback.totalScore end
+	end
+
+	-- Show toast
+	showTriageToast(feedback.isCorrect, feedback.pointsDelta)
+
+	-- Hide patient UI
+	local infoFrame   = gui:FindFirstChild("PatientInfoFrame")
+	local triageFrame = gui:FindFirstChild("TriageFrame")
+	local timerFrame  = gui:FindFirstChild("TimerFrame")
+	if infoFrame   then infoFrame.Visible   = false end
+	if triageFrame then triageFrame.Visible = false end
+	if timerFrame  then timerFrame.Visible  = false end
+	hideToast()
+
+	-- Reset camera
+	if _G.ResetPatientCamera then _G.ResetPatientCamera() end
 end)

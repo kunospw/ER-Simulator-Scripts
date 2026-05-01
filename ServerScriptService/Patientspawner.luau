@@ -112,14 +112,15 @@ local function spawnPatientsForScenario(player, scenarioId)
 		npc:SetAttribute("TargetRoom",    patientData.targetRoom or "")
 		npc:SetAttribute("Pose",          slot.pose)
 		npc:SetAttribute("Diagnosis",     patientData.diagnosis or "")
+		npc:SetAttribute("Complaint",     patientData.complaint or "Keluhan tidak tersedia.") -- tambah ini
 
 		local vitals    = patientData.vitals or {}
 		local crt       = vitals.crt or ""
 		local normalCRT = (crt == "<2 detik" or crt == "≤2 detik")
 
 		npc:SetAttribute("Breathing", tostring(vitals.rr  or 0) .. "x/mnt")
-		npc:SetAttribute("Perfusion", normalCRT and "Normal" or "Delayed")
-		npc:SetAttribute("Mental",    (vitals.gcs or 15) >= 13 and "Alert" or "Impaired")
+		npc:SetAttribute("Perfusion", normalCRT and "Normal" or "Terlambat")
+		npc:SetAttribute("Mental",    (vitals.gcs or 15) >= 13 and "Sadar" or "Terganggu")
 		npc:SetAttribute("GCS",       vitals.gcs  or 15)
 		npc:SetAttribute("SpO2",      vitals.spo2 or 0)
 		npc:SetAttribute("BP",        vitals.td   or "")
@@ -156,6 +157,13 @@ local function spawnPatientsForScenario(player, scenarioId)
 	end
 
 	print("[PatientSpawner] Spawned", #spawnedPatients[player], "patients for:", scenarioId)
+	local totalSpawned = #spawnedPatients[player]
+	local sessionEvent = ServerStorage:FindFirstChild("PatientSessionStarted")
+	if sessionEvent then
+		sessionEvent:Fire(player, totalSpawned)
+	else
+		warn("[PatientSpawner] PatientSessionStarted BindableEvent not found in ServerStorage")
+	end
 end
 
 -- ── TogglePrompt handler ──────────────────────────────────────────────────────

@@ -238,20 +238,11 @@ end
 
 -- ── Entry Point ───────────────────────────────────────────────────────────────
 
--- Get which scenario to load. 
--- Change "food_poisoning" to whichever scenario ID you want to test,
--- or pass it dynamically via a RemoteEvent / attribute.
-local scenarioId = ScenarioScreen:GetAttribute("ScenarioId") or "food_poisoning"
-local scenario   = ScenarioData.GetScenario(scenarioId)
-
-if not scenario then
-	warn("[ScenarioScreen] Scenario not found:", scenarioId)
-	scenario = ScenarioData.GetDefault()
-end
-
 -- Small startup delay so the screen is ready
 ScenarioScreen:GetAttributeChangedSignal("StartDialogue"):Connect(function()
 	if ScenarioScreen:GetAttribute("StartDialogue") then
-		startScenario(scenario) -- or whatever your entry function is
+		local scenarioId = ScenarioScreen:GetAttribute("ScenarioId") or "food_poisoning"
+		local scenario = ScenarioData.GetScenario(scenarioId) or ScenarioData.GetDefault()
+		startScenario(scenario)
 	end
 end)

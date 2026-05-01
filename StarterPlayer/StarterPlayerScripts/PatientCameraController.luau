@@ -35,6 +35,10 @@ local function resetCamera()
 	activeTouch  = nil
 	lastTouchPos = nil
 
+	local RS = game:GetService("ReplicatedStorage")
+	local toggleRemote = RS:FindFirstChild("TogglePrompt")
+	if toggleRemote then toggleRemote:FireServer(true) end
+
 	camera.CameraType = Enum.CameraType.Custom
 	local char = player.Character
 	if char then
@@ -57,6 +61,10 @@ focusRemote.OnClientEvent:Connect(function(patientModel)
 	distance   = 6
 
 	camera.CameraType = Enum.CameraType.Scriptable
+	
+	local RS = game:GetService("ReplicatedStorage")
+	local toggleRemote = RS:FindFirstChild("TogglePrompt")
+	if toggleRemote then toggleRemote:FireServer(false) end
 end)
 
 -- ── Reset from server relay OR from UIController ──────────────────────────────

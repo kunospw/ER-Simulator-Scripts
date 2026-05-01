@@ -128,7 +128,6 @@ end
 
 -- ── Launch scenario ───────────────────────────────────────────────────────────
 local function launchScenario(scenarioId)
-	-- Fade to fully opaque before launching
 	TweenService:Create(MainMenuFrame,
 		TweenInfo.new(0.3, Enum.EasingStyle.Quad),
 		{ BackgroundTransparency = 0 }
@@ -136,8 +135,8 @@ local function launchScenario(scenarioId)
 	task.wait(0.3)
 	local scenarioScreen = PlayerGui:FindFirstChild("ScenarioScreen")
 	if scenarioScreen then
-		scenarioScreen:SetAttribute("ScenarioId", scenarioId)
-		scenarioScreen:SetAttribute("StartDialogue", false)
+		scenarioScreen:SetAttribute("StartDialogue", false) -- reset dulu
+		scenarioScreen:SetAttribute("ScenarioId", scenarioId) -- baru set ID
 	end
 	MainMenuGui.Enabled = false
 	enableControls()
