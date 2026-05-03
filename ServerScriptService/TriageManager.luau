@@ -7,6 +7,8 @@ local ServerStorage = game:GetService("ServerStorage")
 local submitRemote = RS:WaitForChild("SubmitTriage")
 local resultRemote = RS:WaitForChild("TriageResult")
 local sessionRemote = RS:WaitForChild("SessionComplete")
+local SS = game:GetService("ServerStorage")
+local patientCleared = SS:WaitForChild("PatientCleared")
 local TweenService = game:GetService("TweenService")
 local sessionEvent  = ServerStorage:WaitForChild("PatientSessionStarted")
 
@@ -74,9 +76,11 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 		triaged[player][patientId] = true
 		targetNPC:SetAttribute("Triaged", true)
 
+		local slotIndex = targetNPC:GetAttribute("SlotIndex")  -- NEW
+
 		task.delay(1.5, function()
 			if not targetNPC or not targetNPC.Parent then return end
-			-- Fade out via server (replicated otomatis)
+			-- Fade out (sama seperti sebelumnya)
 			for _, part in ipairs(targetNPC:GetDescendants()) do
 				if part:IsA("BasePart") then
 					local tween = TweenService:Create(part,
@@ -90,8 +94,13 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 			if targetNPC and targetNPC.Parent then
 				targetNPC:Destroy()
 			end
+			-- NEW: notify PatientSpawner that this slot is now free
+			if slotIndex then
+				patientCleared:Fire(player, slotIndex)
+			end
 		end)
 	end
+	
 	resultRemote:FireClient(player, {
 		patientId   = patientId,
 		chosen      = chosenTriage,
