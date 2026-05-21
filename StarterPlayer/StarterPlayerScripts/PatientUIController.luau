@@ -13,6 +13,14 @@ local submitTriageRemote = RS:WaitForChild("SubmitTriage")
 local triageResultRemote = RS:WaitForChild("TriageResult")
 
 local patientTimers = {}
+local currentViewedPatientId = nil
+
+local startRemote = RS:WaitForChild("StartCutscene")
+
+startRemote.OnClientEvent:Connect(function()
+	-- Wipe the timer dictionary clean every time a new scenario starts
+	patientTimers = {}
+end)
 
 -- ── Tooltip data ──────────────────────────────────────────────────────────────
 local TIPS = {
@@ -137,6 +145,9 @@ local function vitalColor(value, paramType)
 end
 
 -- ── Triage Toast ──────────────────────────────────────────────────────────────
+local activeTriageTweens = {}
+local activeTriageHideTask = nil
+
 local function showTriageToast(isCorrect, pointsDelta)
 	local gui   = getGui()
 	local toast = gui:FindFirstChild("TriageToast")
@@ -145,6 +156,18 @@ local function showTriageToast(isCorrect, pointsDelta)
 	local icon     = toast:FindFirstChild("PillIcon")
 	local pillText = toast:FindFirstChild("PillText")
 
+	-- [FIX]: Cancel any currently running tweens and timers from previous rapid clicks
+	for _, tween in ipairs(activeTriageTweens) do
+		tween:Cancel()
+	end
+	activeTriageTweens = {}
+
+	if activeTriageHideTask then
+		task.cancel(activeTriageHideTask)
+		activeTriageHideTask = nil
+	end
+
+	-- Setup colors and text
 	if isCorrect then
 		toast.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
 		if icon     then icon.Text     = "✓" end
@@ -160,43 +183,44 @@ local function showTriageToast(isCorrect, pointsDelta)
 	if icon     then icon.TextTransparency     = 1 end
 	if pillText then pillText.TextTransparency = 1 end
 
-	TweenService:Create(toast,
-		TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ BackgroundTransparency = 0.15 }
-	):Play()
+	-- Play Fade In tweens and track them
+	local t1 = TweenService:Create(toast, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0.15 })
+	t1:Play()
+	table.insert(activeTriageTweens, t1)
+
 	if icon then
-		TweenService:Create(icon,
-			TweenInfo.new(0.2, Enum.EasingStyle.Quad),
-			{ TextTransparency = 0 }
-		):Play()
+		local t2 = TweenService:Create(icon, TweenInfo.new(0.2, Enum.EasingStyle.Quad), { TextTransparency = 0 })
+		t2:Play()
+		table.insert(activeTriageTweens, t2)
 	end
 	if pillText then
-		TweenService:Create(pillText,
-			TweenInfo.new(0.2, Enum.EasingStyle.Quad),
-			{ TextTransparency = 0 }
-		):Play()
+		local t3 = TweenService:Create(pillText, TweenInfo.new(0.2, Enum.EasingStyle.Quad), { TextTransparency = 0 })
+		t3:Play()
+		table.insert(activeTriageTweens, t3)
 	end
 
-	task.delay(2, function()
-		local fadeOut = TweenService:Create(toast,
-			TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-			{ BackgroundTransparency = 1 }
-		)
+	-- Schedule Fade Out and track the task
+	activeTriageHideTask = task.delay(2, function()
+		activeTriageTweens = {} -- Clear old tweens
+
+		local fadeOut = TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { BackgroundTransparency = 1 })
 		fadeOut:Play()
+		table.insert(activeTriageTweens, fadeOut)
+
 		if icon then
-			TweenService:Create(icon,
-				TweenInfo.new(0.3, Enum.EasingStyle.Quad),
-				{ TextTransparency = 1 }
-			):Play()
+			local f2 = TweenService:Create(icon, TweenInfo.new(0.3, Enum.EasingStyle.Quad), { TextTransparency = 1 })
+			f2:Play()
+			table.insert(activeTriageTweens, f2)
 		end
 		if pillText then
-			TweenService:Create(pillText,
-				TweenInfo.new(0.3, Enum.EasingStyle.Quad),
-				{ TextTransparency = 1 }
-			):Play()
+			local f3 = TweenService:Create(pillText, TweenInfo.new(0.3, Enum.EasingStyle.Quad), { TextTransparency = 1 })
+			f3:Play()
+			table.insert(activeTriageTweens, f3)
 		end
+
 		fadeOut.Completed:Connect(function()
 			toast.Visible = false
+			activeTriageTweens = {}
 		end)
 	end)
 end
@@ -335,12 +359,16 @@ showUIRemote.OnClientEvent:Connect(function(patient)
 	local id = patient:GetAttribute("PatientID") or "???"
 	local timerLabel = timerFrame and timerFrame:FindFirstChild("TimeText")
 
+	-- Set this patient as the currently viewed one
+	currentViewedPatientId = id 
+
 	if not patientTimers[id] then
 		patientTimers[id] = { timeLeft = 60, running = true }
 		task.spawn(function()
 			local state = patientTimers[id]
 			while state.timeLeft >= 0 and state.running do
-				if timerLabel and timerFrame and timerFrame.Visible then
+				-- [FIX]: Only update the UI text if this loop belongs to the patient currently being viewed
+				if currentViewedPatientId == id and timerLabel and timerFrame and timerFrame.Visible then
 					local m = math.floor(state.timeLeft / 60)
 					local s = state.timeLeft % 60
 					timerLabel.Text = string.format("%02d:%02d", m, s)
@@ -362,23 +390,38 @@ showUIRemote.OnClientEvent:Connect(function(patient)
 		timerLabel.Text = string.format("%02d:%02d", m, s)
 	end
 
-	-- ── Distance check — hide UI but keep timer running ───────────────────────
+	-- ── Distance & Movement check — hide UI but keep timer running ───────────────────────
 	local character = player.Character or player.CharacterAdded:Wait()
 	local root      = character:WaitForChild("HumanoidRootPart")
+	local humanoid  = character:WaitForChild("Humanoid") -- Grab the humanoid
 
 	task.spawn(function()
+		local timeOpened = tick() -- Track exactly when the menu opened
+
 		while infoFrame and infoFrame.Visible do
-			task.wait(0.2)
+			task.wait(0.1) -- Lowered from 0.2 to 0.1 so it reacts faster
+
 			if not root or not root.Parent then break end
-			if not head or not head.Parent  then break end
-			if (root.Position - head.Position).Magnitude > 15 then
-				-- Hide everything
-				if infoFrame  then infoFrame.Visible  = false end
+			if not head or not head.Parent then break end
+			if not humanoid or not humanoid.Parent then break end
+
+			-- MoveDirection > 0 means the player is pushing a movement key/joystick
+			local isTryingToMove = humanoid.MoveDirection.Magnitude > 0
+
+			-- Wait 0.4 seconds before tracking movement so the menu doesn't instantly 
+			-- close if the player was still holding 'W' while pressing 'E'
+			local hasGracePeriodPassed = (tick() - timeOpened) > 0.4
+
+			if (isTryingToMove and hasGracePeriodPassed) or (root.Position - head.Position).Magnitude > 15 then
+				-- Hide patient-specific UI
+				if infoFrame   then infoFrame.Visible   = false end
 				if triageFrame then triageFrame.Visible = false end
 				if timerFrame  then timerFrame.Visible  = false end
-				if scoreFrame  then scoreFrame.Visible  = false end
-				if counterFrame then counterFrame.Visible = false end
 				hideToast()
+
+				-- DO NOT hide scoreFrame or counterFrame here.
+
+				-- Reset the camera and player controls
 				if _G.ResetPatientCamera then
 					_G.ResetPatientCamera()
 				else
@@ -416,4 +459,20 @@ triageResultRemote.OnClientEvent:Connect(function(feedback)
 
 	-- Reset camera
 	if _G.ResetPatientCamera then _G.ResetPatientCamera() end
+end)
+
+-- ── Live UI Updates (Runs independently of the Patient Menu) ──────────────────
+player:GetAttributeChangedSignal("PatientsRemaining"):Connect(function()
+	local gui = getGui()
+	if not gui then return end
+
+	local counterFrame = gui:FindFirstChild("PatientCounterFrame")
+	if counterFrame then
+		local counterText = counterFrame:FindFirstChild("PatientCounterText")
+		if counterText then
+			local remaining = player:GetAttribute("PatientsRemaining") or 0
+			counterText.Text = "Pasien: " .. remaining
+			-- Note: Change "Pasien: " to "Patients: " if you want it in English
+		end
+	end
 end)

@@ -167,10 +167,23 @@ startRemote.OnClientEvent:Connect(function(scenarioId)
 	task.wait(0.5)
 
 	-- Restore player camera
-	camera.CameraType    = Enum.CameraType.Custom
-	camera.CameraSubject = humanoid
-	humanoid.WalkSpeed   = 16
-	humanoid.JumpPower   = 50
+	workspace.CurrentCamera.CameraType    = Enum.CameraType.Custom
+	workspace.CurrentCamera.CameraSubject = humanoid
+
+	-- [FIX]: Force the camera to point in the direction the player is facing
+	if root then
+		local lookDir = root.CFrame.LookVector
+		local headPos = root.Position + Vector3.new(0, 1.5, 0) -- Target the head area
+
+		-- Position the camera 10 studs behind and 2 studs above, looking at the head
+		workspace.CurrentCamera.CFrame = CFrame.lookAt(
+			headPos - (lookDir * 10) + Vector3.new(0, 2, 0), 
+			headPos
+		)
+	end
+
+	humanoid.WalkSpeed  = 16
+	humanoid.JumpPower  = 50
 
 	-- Signal ScenarioScreen to start dialogue
 	local scenarioScreen = player.PlayerGui:FindFirstChild("ScenarioScreen")

@@ -1,6 +1,4 @@
 -- PatientSpawner (Script) — ServerScriptService
--- CHANGES: queue system added, rest unchanged
-
 local Players    = game:GetService("Players")
 local RS         = game:GetService("ReplicatedStorage")
 local SS         = game:GetService("ServerStorage")
@@ -11,39 +9,101 @@ local showUIRemote  = RS:WaitForChild("ShowPatientUI")
 local toggleRemote  = RS:WaitForChild("TogglePrompt")
 local ScenarioData  = require(RS:WaitForChild("ScenarioData"))
 
--- NEW: BindableEvent from TriageManager telling us a slot just freed up
 local patientCleared = SS:WaitForChild("PatientCleared")
 
 local PatientSlots = {
-	{ position = Vector3.new(308.388, 3.47,  57.144), yRot = 180, pose = "Lying"    },
-	{ position = Vector3.new(308.388, 3.47,  71.296), yRot = 180, pose = "Lying"    },
-	{ position = Vector3.new(308.388, 3.47,  43.606), yRot = 180, pose = "Lying"    }
+	{ position = Vector3.new(308.388, 3.47,  57.144), yRot = 180, pose = "Lying" },
+	{ position = Vector3.new(308.388, 3.47,  71.296), yRot = 180, pose = "Lying" },
+	{ position = Vector3.new(308.388, 3.47,  43.606), yRot = 180, pose = "Lying" },
+	{ position = Vector3.new(308.388, 4.197, 28.911), yRot = 180, pose = "Lying" },
+}
+
+-- Animation IDs based on triage
+local animIds = {
+	RED    = "rbxassetid://108659019409982",
+	YELLOW = "rbxassetid://114133933934433",
+	GREEN  = "rbxassetid://507766666",
 }
 
 local patientTemplate = workspace:FindFirstChild("Patient")
 if not patientTemplate then error("[PatientSpawner] No Patient template in Workspace!") end
 patientTemplate.Parent = SS
 
-local spawnedPatients   = {}  -- [player] = { [slotIndex] = npcModel }
-local patientQueues     = {}  -- [player] = { patientData, ... }  (remaining)
-local promptConnections = {}  -- [player] = { RBXScriptConnection }
+local spawnedPatients   = {}
+local patientQueues     = {}
+local promptConnections = {}
 
--- ── Helpers (unchanged) ───────────────────────────────────────────────────────
 local function applyPose(npc, pose, slotPosition)
 	local humanoid = npc:FindFirstChildOfClass("Humanoid")
 	if not humanoid then return end
+
+	humanoid.PlatformStand = true
+	humanoid.WalkSpeed = 0
+	humanoid.JumpPower = 0
+
+	-- Unanchor semua parts
+	for _, part in ipairs(npc:GetDescendants()) do
+		if part:IsA("BasePart") then part.Anchored = false end
+	end
+
+	-- Pose dulu
 	if pose == "Lying" then
-		humanoid.PlatformStand = true
-		for _, part in ipairs(npc:GetDescendants()) do
-			if part:IsA("BasePart") then part.Anchored = true end
-		end
 		npc:PivotTo(CFrame.new(slotPosition) * CFrame.Angles(math.rad(90), 0, math.rad(90)))
 	else
-		humanoid.WalkSpeed = 0
-		humanoid.JumpPower = 0
-		for _, part in ipairs(npc:GetDescendants()) do
-			if part:IsA("BasePart") then part.Anchored = true end
-		end
+		npc:PivotTo(CFrame.new(slotPosition))
+	end
+
+	-- Buat anchor part invisible
+	local anchor = Instance.new("Part")
+	anchor.Size = Vector3.new(1, 1, 1)
+	anchor.Transparency = 1
+	anchor.CanCollide = false
+	anchor.Anchored = true
+	anchor.CFrame = npc:FindFirstChild("HumanoidRootPart").CFrame
+	anchor.Parent = workspace
+
+	-- Weld HRP ke anchor
+	local hrp = npc:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = anchor
+		weld.Part1 = hrp
+		weld.Parent = anchor
+	end
+end
+
+local function playPatientAnim(npc, gcs)
+	local humanoid = npc:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
+
+	local animId
+	if gcs <= 10 then
+		animId = "rbxassetid://108659019409982" -- breathing ragged
+	elseif gcs <= 14 then
+		animId = "rbxassetid://114133933934433" -- sitting up / gelisah
+	else
+		animId = "rbxassetid://108659019409982" -- pakai ragged dulu sampai ada animasi ke-3
+	end
+
+	local anim = Instance.new("Animation")
+	anim.AnimationId = animId
+	-- Pakai AnimationController bukan Humanoid langsung
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		animator = Instance.new("Animator")
+		animator.Parent = humanoid
+	end
+	local track = animator:LoadAnimation(anim)
+	track.Priority = Enum.AnimationPriority.Action4
+	track.Looped = true
+	track:Play()
+	return track
+end
+
+local function hideNameplate(npc)
+	local hum = npc:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 	end
 end
 
@@ -61,7 +121,6 @@ local function cleanupPlayer(player)
 	patientQueues[player] = nil
 end
 
--- ── NEW: spawn a single patient into a specific slot ─────────────────────────
 local function spawnOnePatient(player, patientData, slotIndex)
 	local slot = PatientSlots[slotIndex]
 	if not slot then return end
@@ -78,7 +137,6 @@ local function spawnOnePatient(player, patientData, slotIndex)
 	npc:SetAttribute("Pose",          slot.pose)
 	npc:SetAttribute("Diagnosis",     patientData.diagnosis or "")
 	npc:SetAttribute("Complaint",     patientData.complaint or "Keluhan tidak tersedia.")
-	-- NEW: track which slot this NPC is in so TriageManager can report it back
 	npc:SetAttribute("SlotIndex",     slotIndex)
 
 	local vitals    = patientData.vitals or {}
@@ -94,12 +152,26 @@ local function spawnOnePatient(player, patientData, slotIndex)
 	npc:SetAttribute("HR",        vitals.nadi or 0)
 	npc:SetAttribute("Triaged",   false)
 
+	-- Hide nameplate
+	hideNameplate(npc)
+
 	task.spawn(function()
 		task.wait(0.5)
 		applyPose(npc, slot.pose, slot.position)
+		task.wait(0.2)
+
+		-- Unanchor HRP sementara biar animasi bisa jalan
+		local hrp = npc:FindFirstChild("HumanoidRootPart")
+		if hrp then hrp.Anchored = false end
+
+		local gcs = patientData.vitals and patientData.vitals.gcs or 15
+		playPatientAnim(npc, gcs)
+
+		-- Re-anchor HRP setelah animasi start
+		task.wait(0.1)
+		if hrp then hrp.Anchored = true end
 	end)
 
-	-- ProximityPrompt
 	local head = npc:FindFirstChild("Head")
 	if head then
 		local prompt = Instance.new("ProximityPrompt")
@@ -121,7 +193,6 @@ local function spawnOnePatient(player, patientData, slotIndex)
 	spawnedPatients[player][slotIndex] = npc
 end
 
--- ── Core spawn (initial batch) ────────────────────────────────────────────────
 local function spawnPatientsForScenario(player, scenarioId)
 	local scenario = ScenarioData.GetScenario(scenarioId)
 	if not scenario then
@@ -134,9 +205,8 @@ local function spawnPatientsForScenario(player, scenarioId)
 	promptConnections[player] = {}
 
 	local patients = scenario.patients or {}
-	local maxSlots = #PatientSlots  -- 5
+	local maxSlots = #PatientSlots
 
-	-- Split into first wave vs queue
 	local firstWave = {}
 	local queue     = {}
 	for i, pd in ipairs(patients) do
@@ -152,8 +222,7 @@ local function spawnPatientsForScenario(player, scenarioId)
 		spawnOnePatient(player, entry.data, entry.slotIndex)
 	end
 
-	-- Report total to TriageManager
-	local totalSpawned = #patients  -- total in scenario, not just first wave
+	local totalSpawned = #patients
 	local sessionEvent = SS:FindFirstChild("PatientSessionStarted")
 	if sessionEvent then
 		sessionEvent:Fire(player, totalSpawned)
@@ -163,28 +232,34 @@ local function spawnPatientsForScenario(player, scenarioId)
 		#firstWave, totalSpawned, #queue))
 end
 
--- ── NEW: slot freed — spawn next from queue ───────────────────────────────────
 patientCleared.Event:Connect(function(player, slotIndex)
 	local queue = patientQueues[player]
 	if not queue or #queue == 0 then return end
-
-	-- Small delay so the fade-out animation finishes before new patient appears
 	task.wait(1.2)
-
 	local nextPatient = table.remove(queue, 1)
 	spawnOnePatient(player, nextPatient, slotIndex)
 	print(string.format("[PatientSpawner] Spawned queued patient '%s' into slot %d (%d left in queue)",
 		nextPatient.name or "?", slotIndex, #queue))
 end)
 
--- ── TogglePrompt / remotes (unchanged) ───────────────────────────────────────
 toggleRemote.OnServerEvent:Connect(function(player, state)
 	if not spawnedPatients[player] then return end
+
 	for _, npc in pairs(spawnedPatients[player]) do
 		local head = npc and npc:FindFirstChild("Head")
 		if head then
 			local prompt = head:FindFirstChildOfClass("ProximityPrompt")
-			if prompt then prompt.Enabled = state end
+			if prompt then 
+				-- Check the attribute set by TriageManager
+				local isTriaged = npc:GetAttribute("Triaged")
+
+				-- If the patient is already triaged, force the prompt to stay off
+				if isTriaged then
+					prompt.Enabled = false
+				else
+					prompt.Enabled = state 
+				end
+			end
 		end
 	end
 end)
