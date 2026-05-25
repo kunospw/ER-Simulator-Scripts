@@ -6,42 +6,49 @@ local ServerStorage = game:GetService("ServerStorage")
 local TweenService  = game:GetService("TweenService")
 local SS            = game:GetService("ServerStorage")
 
-local submitRemote  = RS:WaitForChild("SubmitTriage")
-local resultRemote  = RS:WaitForChild("TriageResult")
-local sessionRemote = RS:WaitForChild("SessionComplete")
-local returnRemote  = RS:WaitForChild("ReturnToMenu")
+local submitRemote   = RS:WaitForChild("SubmitTriage")
+local resultRemote   = RS:WaitForChild("TriageResult")
+local sessionRemote  = RS:WaitForChild("SessionComplete")
+local returnRemote   = RS:WaitForChild("ReturnToMenu")
 local patientCleared = SS:WaitForChild("PatientCleared")
-local sessionEvent  = ServerStorage:WaitForChild("PatientSessionStarted")
+local sessionEvent   = ServerStorage:WaitForChild("PatientSessionStarted")
 
 local triaged              = {}
 local scenarioPatientCount = {}
 local mistakes             = {}
+local allSubmissions       = {}
 
 sessionEvent.Event:Connect(function(player, count)
 	scenarioPatientCount[player] = count
 	triaged[player]              = {}
-	player:SetAttribute("Score",        0)
-	player:SetAttribute("CorrectCount", 0)
-	player:SetAttribute("WrongCount",   0)
+	allSubmissions[player]       = {}
+	mistakes[player]             = {}
+	player:SetAttribute("Score",             0)
+	player:SetAttribute("CorrectCount",      0)
+	player:SetAttribute("WrongCount",        0)
 	player:SetAttribute("PatientsRemaining", count)
-	mistakes[player] = {}
+
 	print("[TriageManager] Session started —", player.Name, "—", count, "patients")
 end)
 
 Players.PlayerAdded:Connect(function(player)
 	triaged[player]              = {}
 	scenarioPatientCount[player] = 0
-	player:SetAttribute("Score",        0)
-	player:SetAttribute("CorrectCount", 0)
-	player:SetAttribute("WrongCount",   0)
+	allSubmissions[player]       = {}
+	mistakes[player]             = {}
+	player:SetAttribute("Score",             0)
+	player:SetAttribute("CorrectCount",      0)
+	player:SetAttribute("WrongCount",        0)
 	player:SetAttribute("PatientsRemaining", 0)
-	mistakes[player] = {}
+
 end)
 
 Players.PlayerRemoving:Connect(function(player)
 	triaged[player]              = nil
 	scenarioPatientCount[player] = nil
 	mistakes[player]             = nil
+	allSubmissions[player]       = nil
+
 end)
 
 submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
@@ -65,6 +72,14 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 		return
 	end
 
+	-- Response time calculation
+	local spawnTime   = targetNPC:GetAttribute("SpawnTime") or os.clock()
+	local elapsed     = os.clock() - spawnTime
+	local mm          = math.floor(elapsed / 60)
+	local ss          = math.floor(elapsed % 60)
+	local responseTime = string.format("%02d:%02d", mm, ss)
+
+
 	local correctTriage = targetNPC:GetAttribute("CorrectTriage")
 	local isCorrect     = (chosenTriage == correctTriage)
 	local pointsDelta   = isCorrect and 10 or -5
@@ -72,17 +87,31 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 	local currentScore = player:GetAttribute("Score") or 0
 	player:SetAttribute("Score", currentScore + pointsDelta)
 
+	-- Track all submissions
+	if not allSubmissions[player] then allSubmissions[player] = {} end
+	table.insert(allSubmissions[player], {
+		patientId    = patientId,
+		name         = targetNPC.Name,
+		diagnosis    = targetNPC:GetAttribute("Diagnosis") or "",
+		chosen       = chosenTriage,
+		correct      = correctTriage,
+		isCorrect    = isCorrect,
+		points       = pointsDelta,
+		responseTime = responseTime,
+	})
+
 	if isCorrect then
 		player:SetAttribute("CorrectCount", (player:GetAttribute("CorrectCount") or 0) + 1)
-		local currentRemaining = player:GetAttribute("PatientsRemaining") or 1
-		player:SetAttribute("PatientsRemaining", currentRemaining - 1)
+		player:SetAttribute("PatientsRemaining", (player:GetAttribute("PatientsRemaining") or 1) - 1)
 	else
 		player:SetAttribute("WrongCount", (player:GetAttribute("WrongCount") or 0) + 1)
 		table.insert(mistakes[player], {
-			name      = targetNPC.Name,
-			diagnosis = targetNPC:GetAttribute("Diagnosis") or "Unknown",
-			chosen    = chosenTriage,
-			correct   = correctTriage
+			name         = targetNPC.Name,
+			diagnosis    = targetNPC:GetAttribute("Diagnosis") or "Unknown",
+			chosen       = chosenTriage,
+			correct      = correctTriage,
+			responseTime = responseTime,
+
 		})
 	end
 
@@ -102,24 +131,22 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 				end
 			end
 			task.wait(0.7)
-			if targetNPC and targetNPC.Parent then
-				targetNPC:Destroy()
-			end
-			if slotIndex then
-				patientCleared:Fire(player, slotIndex)
-			end
+			if targetNPC and targetNPC.Parent then targetNPC:Destroy() end
+			if slotIndex then patientCleared:Fire(player, slotIndex) end
 		end)
 	end
 
 	resultRemote:FireClient(player, {
-		patientId   = patientId,
-		chosen      = chosenTriage,
-		correct     = correctTriage,
-		isCorrect   = isCorrect,
-		pointsDelta = pointsDelta,
-		totalScore  = player:GetAttribute("Score"),
-		diagnosis   = targetNPC:GetAttribute("Diagnosis") or "",
-		targetRoom  = targetNPC:GetAttribute("TargetRoom") or "",
+		patientId    = patientId,
+		chosen       = chosenTriage,
+		correct      = correctTriage,
+		isCorrect    = isCorrect,
+		pointsDelta  = pointsDelta,
+		totalScore   = player:GetAttribute("Score"),
+		diagnosis    = targetNPC:GetAttribute("Diagnosis") or "",
+		targetRoom   = targetNPC:GetAttribute("TargetRoom") or "",
+		responseTime = responseTime,
+
 	})
 
 	local totalTriaged = 0
@@ -132,23 +159,25 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 		print("[TriageManager] SCENARIO COMPLETE!")
 		task.wait(2.5)
 		sessionRemote:FireClient(player, {
-			totalScore    = player:GetAttribute("Score"),
-			correctCount  = player:GetAttribute("CorrectCount"),
-			wrongCount    = player:GetAttribute("WrongCount"),
-			totalPatients = totalPatients,
-			mistakes      = mistakes[player]
+			totalScore     = player:GetAttribute("Score"),
+			correctCount   = player:GetAttribute("CorrectCount"),
+			wrongCount     = player:GetAttribute("WrongCount"),
+			totalPatients  = totalPatients,
+			mistakes       = mistakes[player],
+			allSubmissions = allSubmissions[player],
 		})
 	end
 end)
 
--- ReturnToMenu — reset semua state dan reload character
 returnRemote.OnServerEvent:Connect(function(player)
 	triaged[player]              = {}
 	scenarioPatientCount[player] = 0
 	mistakes[player]             = {}
+	allSubmissions[player]       = {}
 	player:SetAttribute("Score",             0)
 	player:SetAttribute("CorrectCount",      0)
 	player:SetAttribute("WrongCount",        0)
 	player:SetAttribute("PatientsRemaining", 0)
-	player:LoadCharacter()
+	player:LoadCharacterAsync()
+
 end)

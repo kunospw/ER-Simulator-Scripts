@@ -18,16 +18,17 @@ local PatientSlots = {
 	{ position = Vector3.new(308.388, 4.197, 28.911), yRot = 180, pose = "Lying" },
 }
 
--- Animation IDs based on triage
-local animIds = {
-	RED    = "rbxassetid://108659019409982",
-	YELLOW = "rbxassetid://114133933934433",
-	GREEN  = "rbxassetid://507766666",
-}
+-- ── Templates ─────────────────────────────────────────────────────────────────
+local maleTemplates   = { SS:WaitForChild("PatientM1"),   SS:WaitForChild("PatientM2") }
+local femaleTemplates = { SS:WaitForChild("PatientFem1"), SS:WaitForChild("PatientFem2") }
 
-local patientTemplate = workspace:FindFirstChild("Patient")
-if not patientTemplate then error("[PatientSpawner] No Patient template in Workspace!") end
-patientTemplate.Parent = SS
+local function getTemplate(gender)
+	if gender == "Perempuan" then
+		return femaleTemplates[math.random(#femaleTemplates)]
+	else
+		return maleTemplates[math.random(#maleTemplates)]
+	end
+end
 
 local spawnedPatients   = {}
 local patientQueues     = {}
@@ -41,33 +42,29 @@ local function applyPose(npc, pose, slotPosition)
 	humanoid.WalkSpeed = 0
 	humanoid.JumpPower = 0
 
-	-- Unanchor semua parts
 	for _, part in ipairs(npc:GetDescendants()) do
 		if part:IsA("BasePart") then part.Anchored = false end
 	end
 
-	-- Pose dulu
 	if pose == "Lying" then
 		npc:PivotTo(CFrame.new(slotPosition) * CFrame.Angles(math.rad(90), 0, math.rad(90)))
 	else
 		npc:PivotTo(CFrame.new(slotPosition))
 	end
 
-	-- Buat anchor part invisible
 	local anchor = Instance.new("Part")
-	anchor.Size = Vector3.new(1, 1, 1)
+	anchor.Size         = Vector3.new(1, 1, 1)
 	anchor.Transparency = 1
-	anchor.CanCollide = false
-	anchor.Anchored = true
-	anchor.CFrame = npc:FindFirstChild("HumanoidRootPart").CFrame
-	anchor.Parent = workspace
+	anchor.CanCollide   = false
+	anchor.Anchored     = true
+	anchor.CFrame       = npc:FindFirstChild("HumanoidRootPart").CFrame
+	anchor.Parent       = workspace
 
-	-- Weld HRP ke anchor
 	local hrp = npc:FindFirstChild("HumanoidRootPart")
 	if hrp then
 		local weld = Instance.new("WeldConstraint")
-		weld.Part0 = anchor
-		weld.Part1 = hrp
+		weld.Part0  = anchor
+		weld.Part1  = hrp
 		weld.Parent = anchor
 	end
 end
@@ -78,24 +75,25 @@ local function playPatientAnim(npc, gcs)
 
 	local animId
 	if gcs <= 10 then
-		animId = "rbxassetid://108659019409982" -- breathing ragged
+		animId = "rbxassetid://108659019409982"
 	elseif gcs <= 14 then
-		animId = "rbxassetid://114133933934433" -- sitting up / gelisah
+		animId = "rbxassetid://114133933934433"
 	else
-		animId = "rbxassetid://108659019409982" -- pakai ragged dulu sampai ada animasi ke-3
+		animId = "rbxassetid://108659019409982"
 	end
 
 	local anim = Instance.new("Animation")
 	anim.AnimationId = animId
-	-- Pakai AnimationController bukan Humanoid langsung
+
 	local animator = humanoid:FindFirstChildOfClass("Animator")
 	if not animator then
 		animator = Instance.new("Animator")
 		animator.Parent = humanoid
 	end
+
 	local track = animator:LoadAnimation(anim)
 	track.Priority = Enum.AnimationPriority.Action4
-	track.Looped = true
+	track.Looped   = true
 	track:Play()
 	return track
 end
@@ -125,9 +123,10 @@ local function spawnOnePatient(player, patientData, slotIndex)
 	local slot = PatientSlots[slotIndex]
 	if not slot then return end
 
-	local npc  = patientTemplate:Clone()
-	npc.Name   = patientData.name or ("Patient_" .. slotIndex)
-	npc.Parent = workspace
+	local template = getTemplate(patientData.gender or "Laki-laki")
+	local npc      = template:Clone()
+	npc.Name       = patientData.name or ("Patient_" .. slotIndex)
+	npc.Parent     = workspace
 
 	npc:PivotTo(CFrame.new(slot.position) * CFrame.Angles(0, math.rad(slot.yRot), 0))
 
@@ -138,6 +137,7 @@ local function spawnOnePatient(player, patientData, slotIndex)
 	npc:SetAttribute("Diagnosis",     patientData.diagnosis or "")
 	npc:SetAttribute("Complaint",     patientData.complaint or "Keluhan tidak tersedia.")
 	npc:SetAttribute("SlotIndex",     slotIndex)
+	npc:SetAttribute("SpawnTime",     os.clock()) -- ← timestamp saat patient spawn
 
 	local vitals    = patientData.vitals or {}
 	local crt       = vitals.crt or ""
@@ -152,7 +152,6 @@ local function spawnOnePatient(player, patientData, slotIndex)
 	npc:SetAttribute("HR",        vitals.nadi or 0)
 	npc:SetAttribute("Triaged",   false)
 
-	-- Hide nameplate
 	hideNameplate(npc)
 
 	task.spawn(function()
@@ -160,14 +159,12 @@ local function spawnOnePatient(player, patientData, slotIndex)
 		applyPose(npc, slot.pose, slot.position)
 		task.wait(0.2)
 
-		-- Unanchor HRP sementara biar animasi bisa jalan
 		local hrp = npc:FindFirstChild("HumanoidRootPart")
 		if hrp then hrp.Anchored = false end
 
 		local gcs = patientData.vitals and patientData.vitals.gcs or 15
 		playPatientAnim(npc, gcs)
 
-		-- Re-anchor HRP setelah animasi start
 		task.wait(0.1)
 		if hrp then hrp.Anchored = true end
 	end)
@@ -244,20 +241,16 @@ end)
 
 toggleRemote.OnServerEvent:Connect(function(player, state)
 	if not spawnedPatients[player] then return end
-
 	for _, npc in pairs(spawnedPatients[player]) do
 		local head = npc and npc:FindFirstChild("Head")
 		if head then
 			local prompt = head:FindFirstChildOfClass("ProximityPrompt")
-			if prompt then 
-				-- Check the attribute set by TriageManager
+			if prompt then
 				local isTriaged = npc:GetAttribute("Triaged")
-
-				-- If the patient is already triaged, force the prompt to stay off
 				if isTriaged then
 					prompt.Enabled = false
 				else
-					prompt.Enabled = state 
+					prompt.Enabled = state
 				end
 			end
 		end

@@ -146,7 +146,7 @@ end
 
 -- ── Triage Toast ──────────────────────────────────────────────────────────────
 local activeTriageTweens = {}
-local activeTriageHideTask = nil
+local currentToastId = 0
 
 local function showTriageToast(isCorrect, pointsDelta)
 	local gui   = getGui()
@@ -156,16 +156,15 @@ local function showTriageToast(isCorrect, pointsDelta)
 	local icon     = toast:FindFirstChild("PillIcon")
 	local pillText = toast:FindFirstChild("PillText")
 
-	-- [FIX]: Cancel any currently running tweens and timers from previous rapid clicks
+	-- Increment the ID to invalidate any previous delayed tasks or tween callbacks
+	currentToastId += 1
+	local myToastId = currentToastId
+
+	-- Cancel any currently running tweens
 	for _, tween in ipairs(activeTriageTweens) do
 		tween:Cancel()
 	end
 	activeTriageTweens = {}
-
-	if activeTriageHideTask then
-		task.cancel(activeTriageHideTask)
-		activeTriageHideTask = nil
-	end
 
 	-- Setup colors and text
 	if isCorrect then
@@ -178,12 +177,12 @@ local function showTriageToast(isCorrect, pointsDelta)
 		if pillText then pillText.Text = pointsDelta .. " · Salah" end
 	end
 
-	toast.Visible              = true
+	toast.Visible                = true
 	toast.BackgroundTransparency = 1
 	if icon     then icon.TextTransparency     = 1 end
 	if pillText then pillText.TextTransparency = 1 end
 
-	-- Play Fade In tweens and track them
+	-- Play Fade In tweens
 	local t1 = TweenService:Create(toast, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0.15 })
 	t1:Play()
 	table.insert(activeTriageTweens, t1)
@@ -199,9 +198,12 @@ local function showTriageToast(isCorrect, pointsDelta)
 		table.insert(activeTriageTweens, t3)
 	end
 
-	-- Schedule Fade Out and track the task
-	activeTriageHideTask = task.delay(2, function()
-		activeTriageTweens = {} -- Clear old tweens
+	-- Schedule Fade Out
+	task.delay(2, function()
+		-- If a new toast was triggered while we were waiting, abort this fade-out completely
+		if currentToastId ~= myToastId then return end
+
+		activeTriageTweens = {} -- Clear fade-in tweens from the table
 
 		local fadeOut = TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { BackgroundTransparency = 1 })
 		fadeOut:Play()
@@ -218,9 +220,11 @@ local function showTriageToast(isCorrect, pointsDelta)
 			table.insert(activeTriageTweens, f3)
 		end
 
-		fadeOut.Completed:Connect(function()
-			toast.Visible = false
-			activeTriageTweens = {}
+		fadeOut.Completed:Connect(function(playbackState)
+			-- Only hide the UI if this is STILL the active toast AND it finished normally without being cancelled
+			if currentToastId == myToastId and playbackState == Enum.PlaybackState.Completed then
+				toast.Visible = false
+			end
 		end)
 	end)
 end

@@ -122,8 +122,9 @@ end)
 
 -- ── Update camera every frame ─────────────────────────────────────────────────
 RunService.RenderStepped:Connect(function()
+	if _G.MenuCameraActive then return end  -- ← tambahin ini
 	if not isFocused or not targetHead or not targetHead.Parent then return end
-
+	
 	local origin = targetHead.Position
 	local camCF  = CFrame.new(origin)
 		* CFrame.Angles(0, math.rad(yaw), 0)
