@@ -1,18 +1,16 @@
 -- CinematicController (LocalScript)
 -- Place in: StarterPlayerScripts
--- Replace your existing Cinematiccontroller with this entire script.
 
 local Players      = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UIS          = game:GetService("UserInputService")
 local RunService   = game:GetService("RunService")
 local RS           = game:GetService("ReplicatedStorage")
+local StarterGui   = game:GetService("StarterGui")
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
--- ── Safe reference helper ─────────────────────────────────────────────────────
--- Prints a clear error instead of hanging forever if something is missing
 local function safeGet(parent, name, timeout)
 	timeout = timeout or 10
 	local obj = parent:WaitForChild(name, timeout)
@@ -23,36 +21,63 @@ local function safeGet(parent, name, timeout)
 end
 
 -- ── RemoteEvents ──────────────────────────────────────────────────────────────
--- These MUST exist in ReplicatedStorage. Create them if missing:
--- StartCutscene, TogglePrompt, SpawnPatients, TriageRoomEntered
-local startRemote   = safeGet(RS, "StartCutscene")
-local toggleRemote  = safeGet(RS, "TogglePrompt")
-local spawnRemote   = safeGet(RS, "SpawnPatients")
-local triageRemote  = safeGet(RS, "TriageRoomEntered")
+local startRemote            = safeGet(RS, "StartCutscene")
+local toggleRemote           = safeGet(RS, "TogglePrompt")
+local spawnRemote            = safeGet(RS, "SpawnPatients")
+local serverFullRemote       = safeGet(RS, "ServerFull")
+local assignedHospitalRemote = safeGet(RS, "AssignedHospital")
 
--- ── World Parts ───────────────────────────────────────────────────────────────
--- These MUST exist directly in Workspace (not nested in a folder/model):
--- CutsceneCamera, CinematicCameraStart, EntrancePoint, EntrancePointTriage
--- AmbulanceMain (rename your parked ambulance to this)
-local entrancePoint   = safeGet(workspace, "EntrancePoint")
+-- ── Assigned hospital ID ──────────────────────────────────────────────────────
+local assignedHospitalId = nil
 
+assignedHospitalRemote.OnClientEvent:Connect(function(hospitalId)
+	assignedHospitalId = hospitalId
+	print("[CinematicController] Assigned to Hospital", hospitalId)
+end)
+
+-- ── Server Full Handler ───────────────────────────────────────────────────────
+serverFullRemote.OnClientEvent:Connect(function()
+	local gui = Instance.new("ScreenGui")
+	gui.Name         = "ServerFullGui"
+	gui.ResetOnSpawn = false
+	gui.Parent       = player.PlayerGui
+
+	local label = Instance.new("TextLabel")
+	label.Size             = UDim2.new(0, 320, 0, 60)
+	label.Position         = UDim2.new(0.5, -160, 0.5, -30)
+	label.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	label.TextColor3       = Color3.new(1, 1, 1)
+	label.Font             = Enum.Font.GothamBold
+	label.TextSize         = 16
+	label.Text             = "Server penuh! Coba lagi nanti."
+	label.BorderSizePixel  = 0
+	label.Parent           = gui
+	Instance.new("UICorner", label).CornerRadius = UDim.new(0, 8)
+
+	local mainMenuGui = player.PlayerGui:FindFirstChild("MainMenuGui")
+	if mainMenuGui then mainMenuGui.Enabled = true end
+
+	task.delay(3, function()
+		gui:Destroy()
+	end)
+end)
 
 -- ── Fade Overlay ──────────────────────────────────────────────────────────────
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name            = "CinematicFade"
-screenGui.ResetOnSpawn    = false
-screenGui.ZIndexBehavior  = Enum.ZIndexBehavior.Global
-screenGui.DisplayOrder    = 99
-screenGui.IgnoreGuiInset  = true
-screenGui.Parent          = player.PlayerGui
+screenGui.Name             = "CinematicFade"
+screenGui.ResetOnSpawn     = false
+screenGui.ZIndexBehavior   = Enum.ZIndexBehavior.Global
+screenGui.DisplayOrder     = 99
+screenGui.IgnoreGuiInset   = true
+screenGui.Parent           = player.PlayerGui
 
 local fadeFrame = Instance.new("Frame")
-fadeFrame.Size                  = UDim2.fromScale(1, 1)
-fadeFrame.BackgroundColor3      = Color3.new(0, 0, 0)
+fadeFrame.Size                   = UDim2.fromScale(1, 1)
+fadeFrame.BackgroundColor3       = Color3.new(0, 0, 0)
 fadeFrame.BackgroundTransparency = 1
-fadeFrame.BorderSizePixel       = 0
-fadeFrame.ZIndex                = 99
-fadeFrame.Parent                = screenGui
+fadeFrame.BorderSizePixel        = 0
+fadeFrame.ZIndex                 = 99
+fadeFrame.Parent                 = screenGui
 
 local function fadeToBlack(duration)
 	local t = TweenService:Create(fadeFrame,
@@ -117,10 +142,22 @@ if not startRemote then
 end
 
 startRemote.OnClientEvent:Connect(function(scenarioId)
-	local cinematicStart = workspace:FindFirstChild("CinematicCameraStart")
-	local ambulance      = workspace:FindFirstChild("AmbulanceMain")
-	local entranceTriage = workspace:FindFirstChild("EntrancePointTriage")
-	local entrancePoint  = workspace:FindFirstChild("EntrancePoint")
+	StarterGui:SetCore("ResetButtonCallback", false)
+	-- Hospital ID harusnya udah diterima sebelum StartCutscene
+	if not assignedHospitalId then
+		warn("[CinematicController] No assigned hospital ID — aborting cinematic")
+		return
+	end
+
+	local hospitalFolder = workspace:FindFirstChild("Hospital" .. assignedHospitalId)
+	if not hospitalFolder then
+		warn("[CinematicController] Hospital folder not found: Hospital" .. assignedHospitalId)
+		return
+	end
+
+	local cinematicStart = hospitalFolder:FindFirstChild("CinematicCameraStart")
+	local ambulance      = hospitalFolder:FindFirstChild("AmbulanceMain")
+	local entrancePoint  = hospitalFolder:FindFirstChild("EntrancePoint")
 
 	local character = player.Character or player.CharacterAdded:Wait()
 	local humanoid  = character:WaitForChild("Humanoid")
@@ -128,22 +165,21 @@ startRemote.OnClientEvent:Connect(function(scenarioId)
 
 	if toggleRemote then toggleRemote:FireServer(false) end
 
-	-- Lock player
 	humanoid.WalkSpeed = 0
 	humanoid.JumpPower = 0
 
 	camera.CameraType    = Enum.CameraType.Scriptable
 	camera.CameraSubject = nil
 
-	-- SHOT 1: Look at ambulance from outside
+	-- SHOT 1: Look at ambulance
 	if cinematicStart and ambulance then
 		local ambulancePos = ambulance:GetPivot().Position
 		local shot1 = CFrame.new(cinematicStart.Position, ambulancePos + Vector3.new(0, 1, 0))
 		camera.CFrame = shot1
 
-		fadeToBlack(0.6)  -- smooth 0.6s fade to black
+		fadeToBlack(0.6)
 		task.wait(0.3)
-		fadeFromBlack(0.8) -- fade in on ambulance shot    -- hold on ambulance
+		fadeFromBlack(0.8)
 
 		-- SHOT 2: Pan toward ER entrance
 		if entrancePoint then
@@ -155,7 +191,7 @@ startRemote.OnClientEvent:Connect(function(scenarioId)
 			task.wait(1)
 		end
 	else
-		warn("[CinematicController] CinematicCameraStart or AmbulanceMain missing — skipping camera shots")
+		warn("[CinematicController] CinematicCameraStart or AmbulanceMain missing in Hospital" .. assignedHospitalId)
 		task.wait(0.5)
 	end
 
@@ -166,26 +202,25 @@ startRemote.OnClientEvent:Connect(function(scenarioId)
 	end
 	task.wait(0.5)
 
+	-- Reset hospital ID untuk session berikutnya
+	assignedHospitalId = nil
+
 	-- Restore player camera
 	workspace.CurrentCamera.CameraType    = Enum.CameraType.Custom
 	workspace.CurrentCamera.CameraSubject = humanoid
 
-	-- [FIX]: Force the camera to point in the direction the player is facing
 	if root then
 		local lookDir = root.CFrame.LookVector
-		local headPos = root.Position + Vector3.new(0, 1.5, 0) -- Target the head area
-
-		-- Position the camera 10 studs behind and 2 studs above, looking at the head
+		local headPos = root.Position + Vector3.new(0, 1.5, 0)
 		workspace.CurrentCamera.CFrame = CFrame.lookAt(
-			headPos - (lookDir * 10) + Vector3.new(0, 2, 0), 
+			headPos - (lookDir * 10) + Vector3.new(0, 2, 0),
 			headPos
 		)
 	end
 
-	humanoid.WalkSpeed  = 16
-	humanoid.JumpPower  = 50
+	humanoid.WalkSpeed = 16
+	humanoid.JumpPower = 50
 
-	-- Signal ScenarioScreen to start dialogue
 	local scenarioScreen = player.PlayerGui:FindFirstChild("ScenarioScreen")
 	if scenarioScreen then
 		fadeFromBlack(0.8)

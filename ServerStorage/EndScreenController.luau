@@ -55,6 +55,8 @@ local function buildMistakeCard(listParent, mistakeData)
 end
 
 sessionRemote.OnClientEvent:Connect(function(data)
+	local StarterGui = game:GetService("StarterGui")
+	StarterGui:SetCore("ResetButtonCallback", true)
 	local gui = getEndScreen()
 	local mainFrame = gui:WaitForChild("MainFrame")
 	local scoreText = mainFrame:WaitForChild("ScoreText")

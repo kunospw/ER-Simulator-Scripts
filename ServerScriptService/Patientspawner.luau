@@ -3,20 +3,16 @@ local Players    = game:GetService("Players")
 local RS         = game:GetService("ReplicatedStorage")
 local SS         = game:GetService("ServerStorage")
 
-local spawnRemote   = RS:WaitForChild("SpawnPatients")
-local focusRemote   = RS:WaitForChild("FocusPatientCamera")
-local showUIRemote  = RS:WaitForChild("ShowPatientUI")
-local toggleRemote  = RS:WaitForChild("TogglePrompt")
-local ScenarioData  = require(RS:WaitForChild("ScenarioData"))
+local spawnRemote      = RS:WaitForChild("SpawnPatients")
+local focusRemote      = RS:WaitForChild("FocusPatientCamera")
+local showUIRemote     = RS:WaitForChild("ShowPatientUI")
+local toggleRemote     = RS:WaitForChild("TogglePrompt")
+local serverFullRemote = RS:WaitForChild("ServerFull")
+
+local ScenarioData     = require(RS:WaitForChild("ScenarioData"))
+local HospitalRegistry = require(SS:WaitForChild("HospitalRegistry"))
 
 local patientCleared = SS:WaitForChild("PatientCleared")
-
-local PatientSlots = {
-	{ position = Vector3.new(308.388, 3.47,  57.144), yRot = 180, pose = "Lying" },
-	{ position = Vector3.new(308.388, 3.47,  71.296), yRot = 180, pose = "Lying" },
-	{ position = Vector3.new(308.388, 3.47,  43.606), yRot = 180, pose = "Lying" },
-	{ position = Vector3.new(308.388, 4.197, 28.911), yRot = 180, pose = "Lying" },
-}
 
 -- ── Templates ─────────────────────────────────────────────────────────────────
 local maleTemplates   = { SS:WaitForChild("PatientM1"),   SS:WaitForChild("PatientM2") }
@@ -105,7 +101,8 @@ local function hideNameplate(npc)
 	end
 end
 
-local function cleanupPlayer(player)
+-- Cleanup patients only — tidak release hospital
+local function cleanupPatients(player)
 	if promptConnections[player] then
 		for _, conn in ipairs(promptConnections[player]) do conn:Disconnect() end
 		promptConnections[player] = nil
@@ -119,8 +116,14 @@ local function cleanupPlayer(player)
 	patientQueues[player] = nil
 end
 
-local function spawnOnePatient(player, patientData, slotIndex)
-	local slot = PatientSlots[slotIndex]
+-- Full cleanup termasuk release hospital — dipanggil saat player leaving/return to menu
+local function cleanupPlayer(player)
+	HospitalRegistry.Release(player)
+	cleanupPatients(player)
+end
+
+local function spawnOnePatient(player, patientData, slotIndex, beds)
+	local slot = beds[slotIndex]
 	if not slot then return end
 
 	local template = getTemplate(patientData.gender or "Laki-laki")
@@ -137,7 +140,7 @@ local function spawnOnePatient(player, patientData, slotIndex)
 	npc:SetAttribute("Diagnosis",     patientData.diagnosis or "")
 	npc:SetAttribute("Complaint",     patientData.complaint or "Keluhan tidak tersedia.")
 	npc:SetAttribute("SlotIndex",     slotIndex)
-	npc:SetAttribute("SpawnTime",     os.clock()) -- ← timestamp saat patient spawn
+	npc:SetAttribute("SpawnTime",     os.clock())
 
 	local vitals    = patientData.vitals or {}
 	local crt       = vitals.crt or ""
@@ -197,12 +200,32 @@ local function spawnPatientsForScenario(player, scenarioId)
 		return
 	end
 
-	cleanupPlayer(player)
+	-- Hospital udah di-assign di ScenarioManager, tinggal get aja
+	local hospital = HospitalRegistry.GetByPlayer(player)
+	if not hospital then
+		warn("[PatientSpawner] No hospital found for", player.Name)
+		serverFullRemote:FireClient(player)
+		return
+	end
+
+	-- Cleanup patients lama tapi JANGAN release hospital
+	cleanupPatients(player)
+
+	-- Teleport player ke hospital
+	local character = player.Character
+	if character then
+		local hrp = character:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			hrp.CFrame = CFrame.new(hospital.spawnPosition + Vector3.new(0, 3, 0))
+		end
+	end
+
 	spawnedPatients[player]   = {}
 	promptConnections[player] = {}
 
 	local patients = scenario.patients or {}
-	local maxSlots = #PatientSlots
+	local beds     = hospital.beds
+	local maxSlots = #beds
 
 	local firstWave = {}
 	local queue     = {}
@@ -216,7 +239,7 @@ local function spawnPatientsForScenario(player, scenarioId)
 	patientQueues[player] = queue
 
 	for _, entry in ipairs(firstWave) do
-		spawnOnePatient(player, entry.data, entry.slotIndex)
+		spawnOnePatient(player, entry.data, entry.slotIndex, beds)
 	end
 
 	local totalSpawned = #patients
@@ -225,16 +248,23 @@ local function spawnPatientsForScenario(player, scenarioId)
 		sessionEvent:Fire(player, totalSpawned)
 	end
 
-	print(string.format("[PatientSpawner] Spawned %d / %d patients (queue: %d)",
-		#firstWave, totalSpawned, #queue))
+	print(string.format("[PatientSpawner] Player %s → Hospital %d | Spawned %d/%d patients (queue: %d)",
+		player.Name, hospital.id, #firstWave, totalSpawned, #queue))
 end
 
 patientCleared.Event:Connect(function(player, slotIndex)
 	local queue = patientQueues[player]
 	if not queue or #queue == 0 then return end
+
+	local hospital = HospitalRegistry.GetByPlayer(player)
+	if not hospital then
+		warn("[PatientSpawner] No hospital found for", player.Name, "on patientCleared")
+		return
+	end
+
 	task.wait(1.2)
 	local nextPatient = table.remove(queue, 1)
-	spawnOnePatient(player, nextPatient, slotIndex)
+	spawnOnePatient(player, nextPatient, slotIndex, hospital.beds)
 	print(string.format("[PatientSpawner] Spawned queued patient '%s' into slot %d (%d left in queue)",
 		nextPatient.name or "?", slotIndex, #queue))
 end)

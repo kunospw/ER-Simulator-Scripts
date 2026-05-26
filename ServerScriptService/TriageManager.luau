@@ -12,6 +12,7 @@ local sessionRemote  = RS:WaitForChild("SessionComplete")
 local returnRemote   = RS:WaitForChild("ReturnToMenu")
 local patientCleared = SS:WaitForChild("PatientCleared")
 local sessionEvent   = ServerStorage:WaitForChild("PatientSessionStarted")
+local HospitalRegistry = require(SS:WaitForChild("HospitalRegistry"))
 
 local triaged              = {}
 local scenarioPatientCount = {}
@@ -170,6 +171,8 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 end)
 
 returnRemote.OnServerEvent:Connect(function(player)
+	HospitalRegistry.Release(player)
+
 	triaged[player]              = {}
 	scenarioPatientCount[player] = 0
 	mistakes[player]             = {}

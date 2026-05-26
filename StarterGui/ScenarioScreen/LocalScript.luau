@@ -101,31 +101,36 @@ local function populateTitleCard(scenario)
 end
 
 -- Sembunyikan NPC cinematic (stretcher, dummy, workers)
-local function hideCinematicNPCs()
+local function hideCinematicNPCs(hospitalId)
+	local folder = hospitalId and workspace:FindFirstChild("Hospital" .. hospitalId)
+	local searchIn = folder or workspace
+
 	local toHide = {"StretcherCinematic", "Dummy", "Worker 1", "Worker 2"}
 	for _, name in ipairs(toHide) do
-		local obj = workspace:FindFirstChild(name)
+		local obj = searchIn:FindFirstChild(name)
 		if obj then
-			-- Sembunyikan semua parts
 			for _, part in ipairs(obj:GetDescendants()) do
 				if part:IsA("BasePart") then
-					part.Transparency = 1
+					TweenService:Create(part,
+						TweenInfo.new(0.5, Enum.EasingStyle.Quad),
+						{ Transparency = 1 }
+					):Play()
+					part.CanCollide = false
 				end
 				if part:IsA("Decal") or part:IsA("Texture") then
 					part.Transparency = 1
 				end
 			end
-			-- Kalau obj sendiri BasePart
 			if obj:IsA("BasePart") then
 				obj.Transparency = 1
+				obj.CanCollide = false
 			end
 		end
 	end
 end
 
--- Listen ke server signal untuk hide NPC
-hideNPCRemote.OnClientEvent:Connect(function()
-	hideCinematicNPCs()
+hideNPCRemote.OnClientEvent:Connect(function(hospitalId)
+	hideCinematicNPCs(hospitalId)
 end)
 
 local function showDialogueLine(index)
