@@ -252,21 +252,65 @@ local function spawnPatientsForScenario(player, scenarioId)
 		player.Name, hospital.id, #firstWave, totalSpawned, #queue))
 end
 
-patientCleared.Event:Connect(function(player, slotIndex)
-	local queue = patientQueues[player]
-	if not queue or #queue == 0 then return end
+-- Helper function to generate a random patient for Multiplayer
+local function generateRandomPatient()
+	local triages = {"RED", "YELLOW", "GREEN", "BLACK"}
+	return {
+		id = "MP_" .. math.random(1000, 9999),
+		name = "Korban Darurat",
+		gender = math.random() > 0.5 and "Laki-laki" or "Perempuan",
+		correctTriage = triages[math.random(#triages)],
+		diagnosis = "Multiplayer Victim",
+		vitals = { rr = 20, crt = "<2 detik", gcs = 15 }
+	}
+end
 
-	local hospital = HospitalRegistry.GetByPlayer(player)
-	if not hospital then
-		warn("[PatientSpawner] No hospital found for", player.Name, "on patientCleared")
+-- [FIX]: Safely get OR create the event immediately so the script doesn't freeze
+local startMpSpawns = SS:FindFirstChild("StartMPSpawns")
+if not startMpSpawns then
+	startMpSpawns = Instance.new("BindableEvent")
+	startMpSpawns.Name = "StartMPSpawns"
+	startMpSpawns.Parent = SS
+end
+
+startMpSpawns.Event:Connect(function(player, hospitalId, slotIndex)
+	-- Safely initialize tables without overwriting existing ones
+	if not spawnedPatients[player] then spawnedPatients[player] = {} end
+	if not promptConnections[player] then promptConnections[player] = {} end
+
+	local hospital = HospitalRegistry.Hospitals[hospitalId]
+	if hospital then
+		local randomPatient = generateRandomPatient()
+		spawnOnePatient(player, randomPatient, slotIndex, hospital.beds)
+	else
+		warn("[PatientSpawner] Invalid Hospital ID:", hospitalId)
+	end
+end)
+
+patientCleared.Event:Connect(function(player, slotIndex)
+	-- [FIX]: Use AssignedHospitalId to find the room, bypassing ownership rules
+	if player:GetAttribute("InMultiplayer") then
+		task.wait(1.2)
+		local hId = player:GetAttribute("AssignedHospitalId")
+		local hospital = HospitalRegistry.Hospitals[hId]
+
+		if hospital then
+			local randomPatient = generateRandomPatient()
+			spawnOnePatient(player, randomPatient, slotIndex, hospital.beds)
+		end
 		return
 	end
+
+	-- Standard Singleplayer Logic
+	local hospital = HospitalRegistry.GetByPlayer(player)
+	if not hospital then return end
+
+	local queue = patientQueues[player]
+	if not queue or #queue == 0 then return end
 
 	task.wait(1.2)
 	local nextPatient = table.remove(queue, 1)
 	spawnOnePatient(player, nextPatient, slotIndex, hospital.beds)
-	print(string.format("[PatientSpawner] Spawned queued patient '%s' into slot %d (%d left in queue)",
-		nextPatient.name or "?", slotIndex, #queue))
 end)
 
 toggleRemote.OnServerEvent:Connect(function(player, state)

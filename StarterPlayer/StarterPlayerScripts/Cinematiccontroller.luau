@@ -154,7 +154,29 @@ startRemote.OnClientEvent:Connect(function(scenarioId)
 		warn("[CinematicController] Hospital folder not found: Hospital" .. assignedHospitalId)
 		return
 	end
-
+	
+	local toShow = {"StretcherCinematic", "Dummy", "Worker 1", "Worker 2"}
+	for _, name in ipairs(toShow) do
+		local obj = hospitalFolder:FindFirstChild(name)
+		if obj then
+			for _, part in ipairs(obj:GetDescendants()) do
+				if part:IsA("BasePart") then
+					part.Transparency = 0
+					part.CanCollide = false
+					part.AssemblyLinearVelocity = Vector3.zero   -- add this
+					part.AssemblyAngularVelocity = Vector3.zero  -- add this
+				end
+				if part:IsA("Decal") or part:IsA("Texture") then
+					part.Transparency = 0
+				end
+			end
+			if obj:IsA("BasePart") then
+				obj.Transparency = 0
+				obj.CanCollide = (name == "StretcherCinematic") -- changed
+			end
+		end
+	end
+	
 	local cinematicStart = hospitalFolder:FindFirstChild("CinematicCameraStart")
 	local ambulance      = hospitalFolder:FindFirstChild("AmbulanceMain")
 	local entrancePoint  = hospitalFolder:FindFirstChild("EntrancePoint")

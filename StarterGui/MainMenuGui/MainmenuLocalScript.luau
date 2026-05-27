@@ -37,6 +37,15 @@ local MultiplayerButton    = ContentPanel:WaitForChild("MultiplayerButton")
 local TriggerCinematic = RS:WaitForChild("TriggerCinematic")
 local ScenarioData     = require(RS:WaitForChild("ScenarioData"))
 
+-- Lobby Remotes
+local CreateLobby   = RS:WaitForChild("CreateLobby")
+local JoinLobby     = RS:WaitForChild("JoinLobby")
+local LeaveLobby    = RS:WaitForChild("LeaveLobby")
+local UpdateLobbies = RS:WaitForChild("UpdateLobbies")
+
+local cachedLobbies = {}
+local currentView = "scenario" -- "scenario" | "multiplayer"
+
 -- ── Menu Camera ───────────────────────────────────────────────────────────────
 local camera         = workspace.CurrentCamera
 local menuCameraPart = workspace:FindFirstChild("MenuCamera")
@@ -342,46 +351,147 @@ end
 -- ── Multiplayer view ──────────────────────────────────────────────────────────
 local function showMultiplayerView()
 	local headerLabel = Header:FindFirstChildWhichIsA("TextLabel")
-	if headerLabel then headerLabel.Text = "Multiplayer" end
+	if headerLabel then headerLabel.Text = "Multiplayer Lobbies" end
 
 	clearList()
 	cardLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-	local noLobbyLabel = Instance.new("TextLabel")
-	noLobbyLabel.Text                   = "No multiplayer lobbies yet."
-	noLobbyLabel.TextSize               = 13
-	noLobbyLabel.Font                   = Enum.Font.Gotham
-	noLobbyLabel.TextColor3             = Color3.fromRGB(140, 140, 140)
-	noLobbyLabel.BackgroundTransparency = 1
-	noLobbyLabel.Size                   = UDim2.new(1, -16, 0, 40)
-	noLobbyLabel.TextXAlignment         = Enum.TextXAlignment.Center
-	noLobbyLabel.Parent                 = ScenarioList
+	-- Check if player is currently in a lobby
+	local myLobby = nil
+	local myHostId = nil
+	for hostId, lobbyData in pairs(cachedLobbies) do
+		if table.find(lobbyData.PlayerNames, player.Name) then
+			myLobby = lobbyData
+			myHostId = hostId
+			break
+		end
+	end
 
-	local createBtn = Instance.new("TextButton")
-	createBtn.Name                   = "CreateLobbyButton"
-	createBtn.Text                   = "+ Create Lobby"
-	createBtn.TextSize               = 13
-	createBtn.Font                   = Enum.Font.GothamBold
-	createBtn.TextColor3             = Color3.new(1, 1, 1)
-	createBtn.BackgroundColor3       = Color3.fromRGB(229, 57, 53)
-	createBtn.Size                   = UDim2.new(1, -16, 0, 40)
-	createBtn.BorderSizePixel        = 0
-	createBtn.Parent                 = ScenarioList
-	Instance.new("UICorner", createBtn).CornerRadius = UDim.new(0, 8)
+	if myLobby then
+		-- Render: "In Lobby" View
+		local title = Instance.new("TextLabel")
+		title.Text = myLobby.HostName .. "'s Lobby (" .. myLobby.PlayerCount .. "/" .. myLobby.MaxPlayers .. ")"
+		title.TextSize = 16
+		title.Font = Enum.Font.GothamBold
+		title.TextColor3 = Color3.new(1, 1, 1)
+		title.BackgroundTransparency = 1
+		title.Size = UDim2.new(1, -16, 0, 30)
+		title.Parent = ScenarioList
 
-	createBtn.MouseButton1Click:Connect(function()
-		print("[Multiplayer] Create Lobby clicked — backend belum ada")
-	end)
+		for _, pName in ipairs(myLobby.PlayerNames) do
+			local pFrame = Instance.new("TextLabel")
+			pFrame.Text = "  " .. pName .. (pName == myLobby.HostName and " (Host)" or "")
+			pFrame.TextSize = 13
+			pFrame.Font = Enum.Font.Gotham
+			pFrame.TextColor3 = Color3.fromRGB(200, 200, 200)
+			pFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+			pFrame.Size = UDim2.new(1, -16, 0, 35)
+			pFrame.TextXAlignment = Enum.TextXAlignment.Left
+			pFrame.Parent = ScenarioList
+			Instance.new("UICorner", pFrame).CornerRadius = UDim.new(0, 6)
+		end
+
+		if myLobby.HostName == player.Name then
+			local startBtn = Instance.new("TextButton")
+			startBtn.Text = "Start Match"
+			startBtn.TextSize = 13
+			startBtn.Font = Enum.Font.GothamBold
+			startBtn.TextColor3 = Color3.new(1, 1, 1)
+			startBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
+			startBtn.Size = UDim2.new(1, -16, 0, 40)
+			startBtn.Parent = ScenarioList
+			Instance.new("UICorner", startBtn).CornerRadius = UDim.new(0, 8)
+			startBtn.MouseButton1Click:Connect(function()
+				--print("Start Match clicked - Hook to Matchmaker later")
+				RS:WaitForChild("StartMatch"):FireServer() 
+			end)
+		end
+
+		local leaveBtn = Instance.new("TextButton")
+		leaveBtn.Text = "Leave Lobby"
+		leaveBtn.TextSize = 13
+		leaveBtn.Font = Enum.Font.GothamBold
+		leaveBtn.TextColor3 = Color3.new(1, 1, 1)
+		leaveBtn.BackgroundColor3 = Color3.fromRGB(229, 57, 53)
+		leaveBtn.Size = UDim2.new(1, -16, 0, 40)
+		leaveBtn.Parent = ScenarioList
+		Instance.new("UICorner", leaveBtn).CornerRadius = UDim.new(0, 8)
+		leaveBtn.MouseButton1Click:Connect(function()
+			LeaveLobby:FireServer()
+		end)
+
+	else
+		-- Render: Lobby List View
+		local createBtn = Instance.new("TextButton")
+		createBtn.Name = "CreateLobbyButton"
+		createBtn.Text = "+ Create Lobby"
+		createBtn.TextSize = 13
+		createBtn.Font = Enum.Font.GothamBold
+		createBtn.TextColor3 = Color3.new(1, 1, 1)
+		createBtn.BackgroundColor3 = Color3.fromRGB(229, 57, 53)
+		createBtn.Size = UDim2.new(1, -16, 0, 40)
+		createBtn.Parent = ScenarioList
+		Instance.new("UICorner", createBtn).CornerRadius = UDim.new(0, 8)
+		createBtn.MouseButton1Click:Connect(function()
+			CreateLobby:FireServer()
+		end)
+
+		local hasLobbies = false
+		for hostId, lobbyData in pairs(cachedLobbies) do
+			hasLobbies = true
+			local card = Instance.new("TextButton")
+			card.Text = "  " .. lobbyData.HostName .. "'s Lobby  |  " .. lobbyData.PlayerCount .. "/" .. lobbyData.MaxPlayers
+			card.TextSize = 13
+			card.Font = Enum.Font.GothamBold
+			card.TextColor3 = Color3.new(1, 1, 1)
+			card.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+			card.Size = UDim2.new(1, -16, 0, 50)
+			card.TextXAlignment = Enum.TextXAlignment.Left
+			card.Parent = ScenarioList
+			Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+
+			local joinText = Instance.new("TextLabel")
+			joinText.Text = "Click to Join"
+			joinText.TextSize = 11
+			joinText.Font = Enum.Font.Gotham
+			joinText.TextColor3 = Color3.fromRGB(150, 150, 150)
+			joinText.BackgroundTransparency = 1
+			joinText.Size = UDim2.new(0, 100, 1, 0)
+			joinText.Position = UDim2.new(1, -110, 0, 0)
+			joinText.TextXAlignment = Enum.TextXAlignment.Right
+			joinText.Parent = card
+
+			card.MouseButton1Click:Connect(function()
+				JoinLobby:FireServer(hostId)
+			end)
+		end
+
+		if not hasLobbies then
+			local noLobbyLabel = Instance.new("TextLabel")
+			noLobbyLabel.Text = "No multiplayer lobbies yet."
+			noLobbyLabel.TextSize = 13
+			noLobbyLabel.Font = Enum.Font.Gotham
+			noLobbyLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
+			noLobbyLabel.BackgroundTransparency = 1
+			noLobbyLabel.Size = UDim2.new(1, -16, 0, 40)
+			noLobbyLabel.TextXAlignment = Enum.TextXAlignment.Center
+			noLobbyLabel.Parent = ScenarioList
+		end
+	end
 end
+
+UpdateLobbies.OnClientEvent:Connect(function(lobbiesDict)
+	cachedLobbies = lobbiesDict
+	if currentView == "multiplayer" then
+		showMultiplayerView()
+	end
+end)
 
 local function showScenarioView()
 	local headerLabel = Header:FindFirstChildWhichIsA("TextLabel")
 	if headerLabel then headerLabel.Text = "Choose Scenario" end
 	populateScenarioCards()
 end
-
--- ── View state ────────────────────────────────────────────────────────────────
-local currentView = "scenario"
 
 -- ── Button connections ────────────────────────────────────────────────────────
 PlayButton.MouseButton1Click:Connect(function()
@@ -413,3 +523,55 @@ TweenService:Create(MainMenuFrame,
 	TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 	{ BackgroundTransparency = 0.2 }
 ):Play()
+
+-- ── Multiplayer Match Start Intercept & Timer HUD ─────────────────────────────
+local MatchStarted = RS:WaitForChild("MultiplayerMatchStarted")
+
+-- Generate the Timer UI dynamically right inside the Main Menu
+local timerGui = Instance.new("ScreenGui")
+timerGui.Name = "MultiplayerTimerHUD"
+timerGui.ResetOnSpawn = false
+timerGui.Parent = PlayerGui
+
+local timerFrame = Instance.new("Frame")
+timerFrame.Size = UDim2.new(0, 150, 0, 40)
+timerFrame.Position = UDim2.new(0.5, -75, 0, 20) -- Top Center
+timerFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+timerFrame.Visible = false
+timerFrame.Parent = timerGui
+Instance.new("UICorner", timerFrame).CornerRadius = UDim.new(0, 8)
+
+local timerText = Instance.new("TextLabel")
+timerText.Size = UDim2.new(1, 0, 1, 0)
+timerText.BackgroundTransparency = 1
+timerText.Font = Enum.Font.GothamBold
+timerText.TextColor3 = Color3.new(1, 1, 1)
+timerText.TextSize = 18
+timerText.Text = "01:00"
+timerText.Parent = timerFrame
+
+MatchStarted.OnClientEvent:Connect(function(duration)
+	-- Hide menu & restore controls
+	MainMenuGui.Enabled = false
+	enableControls()
+	if stopMenuCamera then stopMenuCamera() end
+
+	-- Run the Timer
+	timerFrame.Visible = true
+	local timeLeft = duration
+	while timeLeft >= 0 do
+		local m = math.floor(timeLeft / 60)
+		local s = timeLeft % 60
+		timerText.Text = string.format("%02d:%02d", m, s)
+
+		if timeLeft <= 10 then
+			timerText.TextColor3 = Color3.fromRGB(239, 68, 68) 
+		else
+			timerText.TextColor3 = Color3.new(1, 1, 1)
+		end
+
+		task.wait(1)
+		timeLeft -= 1
+	end
+	timerFrame.Visible = false
+end)

@@ -83,11 +83,29 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 
 	local correctTriage = targetNPC:GetAttribute("CorrectTriage")
 	local isCorrect     = (chosenTriage == correctTriage)
-	local pointsDelta   = isCorrect and 10 or -5
+	
+	-- [NEW]: Multiplayer Scoring Logic
+	local pointsDelta = 0
+	local TIME_LIMIT = 15 -- Flexible time limit per patient (in seconds)
+
+	if player:GetAttribute("InMultiplayer") then
+		if isCorrect then
+			if elapsed <= TIME_LIMIT then
+				pointsDelta = 15 -- Correct & Fast
+			else
+				pointsDelta = 7  -- Correct & Overtime
+			end
+		else
+			pointsDelta = -5     -- Wrong
+		end
+	else
+		-- Standard Singleplayer Scoring
+		pointsDelta = isCorrect and 10 or -5
+	end
 
 	local currentScore = player:GetAttribute("Score") or 0
 	player:SetAttribute("Score", currentScore + pointsDelta)
-
+	
 	-- Track all submissions
 	if not allSubmissions[player] then allSubmissions[player] = {} end
 	table.insert(allSubmissions[player], {
@@ -156,17 +174,20 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 	local totalPatients = scenarioPatientCount[player] or 0
 	print(string.format("[TriageManager] %d/%d triaged", totalTriaged, totalPatients))
 
-	if totalPatients > 0 and totalTriaged >= totalPatients then
-		print("[TriageManager] SCENARIO COMPLETE!")
-		task.wait(2.5)
-		sessionRemote:FireClient(player, {
-			totalScore     = player:GetAttribute("Score"),
-			correctCount   = player:GetAttribute("CorrectCount"),
-			wrongCount     = player:GetAttribute("WrongCount"),
-			totalPatients  = totalPatients,
-			mistakes       = mistakes[player],
-			allSubmissions = allSubmissions[player],
-		})
+	-- [NEW]: Only trigger the single-player end screen if they aren't in multiplayer
+	if not player:GetAttribute("InMultiplayer") then
+		if totalPatients > 0 and totalTriaged >= totalPatients then
+			print("[TriageManager] SCENARIO COMPLETE!")
+			task.wait(2.5)
+			sessionRemote:FireClient(player, {
+				totalScore     = player:GetAttribute("Score"),
+				correctCount   = player:GetAttribute("CorrectCount"),
+				wrongCount     = player:GetAttribute("WrongCount"),
+				totalPatients  = totalPatients,
+				mistakes       = mistakes[player],
+				allSubmissions = allSubmissions[player],
+			})
+		end
 	end
 end)
 
