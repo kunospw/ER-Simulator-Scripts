@@ -292,20 +292,33 @@ showUIRemote.OnClientEvent:Connect(function(patient)
 				local pCard = cardRow:FindFirstChild("PerfusionCard")
 				local mCard = cardRow:FindFirstChild("MentalCard")
 
+				-- Check if tooltips should be shown (Training Mode only)
+				local ScenarioData = require(RS:WaitForChild("ScenarioData"))
+				local scenarioScreen = player.PlayerGui:FindFirstChild("ScenarioScreen")
+				local scenarioId = scenarioScreen and scenarioScreen:GetAttribute("ScenarioId") or ""
+				local scenario = ScenarioData.GetScenario(scenarioId)
+				local isTrainingMode = scenario and scenario.mode == "Training Mode"
+
 				if bCard then
 					bCard.Text = "Pernapasan\n" .. rrVal
 					bCard.TextColor3 = vitalColor(rrNum, "rr")
-					bCard.MouseButton1Click:Connect(function() showToast("Breathing") end)
+					if isTrainingMode then
+						bCard.MouseButton1Click:Connect(function() showToast("Breathing") end)
+					end
 				end
 				if pCard then
 					pCard.Text = "Perfusi\n" .. perfVal
 					pCard.TextColor3 = vitalColor(perfVal, "crt")
-					pCard.MouseButton1Click:Connect(function() showToast("Perfusion") end)
+					if isTrainingMode then
+						pCard.MouseButton1Click:Connect(function() showToast("Perfusion") end)
+					end
 				end
 				if mCard then
 					mCard.Text = "Mental\n" .. mentalVal
 					mCard.TextColor3 = vitalColor(mentalVal, "mental")
-					mCard.MouseButton1Click:Connect(function() showToast("Mental") end)
+					if isTrainingMode then
+						mCard.MouseButton1Click:Connect(function() showToast("Mental") end)
+					end
 				end
 			end
 		end
@@ -382,7 +395,12 @@ showUIRemote.OnClientEvent:Connect(function(patient)
 			end
 			if state.timeLeft < 0 then
 				state.running = false
-				print("[Timer] Patient", id, "timer expired")
+				-- Auto-submit timeout if patient not yet triaged
+				local npc = workspace:FindFirstChild(id, true)
+				local alreadyTriaged = npc and npc:GetAttribute("Triaged")
+				if not alreadyTriaged then
+					submitTriageRemote:FireServer(id, "TIMEOUT")
+				end
 			end
 		end)
 	end
@@ -479,4 +497,22 @@ player:GetAttributeChangedSignal("PatientsRemaining"):Connect(function()
 			-- Note: Change "Pasien: " to "Patients: " if you want it in English
 		end
 	end
+end)
+
+-- ── Force Close UI on Round End ──────────────────────────────────────────────
+local matchEndedRemote = RS:WaitForChild("MultiplayerMatchEnded")
+matchEndedRemote.OnClientEvent:Connect(function()
+	local gui = getGui()
+	if not gui then return end
+
+	local infoFrame   = gui:FindFirstChild("PatientInfoFrame")
+	local triageFrame = gui:FindFirstChild("TriageFrame")
+	local timerFrame  = gui:FindFirstChild("TimerFrame")
+
+	if infoFrame   then infoFrame.Visible   = false end
+	if triageFrame then triageFrame.Visible = false end
+	if timerFrame  then timerFrame.Visible  = false end
+
+	hideToast()
+	if _G.ResetPatientCamera then _G.ResetPatientCamera() end
 end)

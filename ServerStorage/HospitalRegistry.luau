@@ -56,25 +56,35 @@ HospitalRegistry.Hospitals = {
 	},
 }
 
-function HospitalRegistry.Assign(player)
+-- [NEW]: Assign multiple players for a Tournament
+function HospitalRegistry.AssignMulti(players)
 	for _, hospital in ipairs(HospitalRegistry.Hospitals) do
 		if not hospital.occupied then
 			hospital.occupied = true
-			hospital.occupiedBy = player
-			print(string.format("[HospitalRegistry] Assigned Hospital %d to %s", hospital.id, player.Name))
+			hospital.occupants = {}
+			for _, p in ipairs(players) do
+				hospital.occupants[p] = true
+			end
 			return hospital
 		end
 	end
-	warn("[HospitalRegistry] No free hospital slots for", player.Name)
 	return nil
 end
 
+function HospitalRegistry.Assign(player)
+	return HospitalRegistry.AssignMulti({player})
+end
+
+-- [FIX]: Only free the hospital if NO ONE is left inside
 function HospitalRegistry.Release(player)
 	for _, hospital in ipairs(HospitalRegistry.Hospitals) do
-		if hospital.occupiedBy == player then
-			hospital.occupied = false
-			hospital.occupiedBy = nil
-			print(string.format("[HospitalRegistry] Released Hospital %d from %s", hospital.id, player.Name))
+		if hospital.occupied and hospital.occupants and hospital.occupants[player] then
+			hospital.occupants[player] = nil
+
+			if next(hospital.occupants) == nil then
+				hospital.occupied = false
+				print("[HospitalRegistry] Hospital " .. hospital.id .. " is fully empty and released.")
+			end
 			return
 		end
 	end
@@ -82,7 +92,7 @@ end
 
 function HospitalRegistry.GetByPlayer(player)
 	for _, hospital in ipairs(HospitalRegistry.Hospitals) do
-		if hospital.occupiedBy == player then
+		if hospital.occupied and hospital.occupants and hospital.occupants[player] then
 			return hospital
 		end
 	end

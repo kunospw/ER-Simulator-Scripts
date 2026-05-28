@@ -19,6 +19,35 @@ local scenarioPatientCount = {}
 local mistakes             = {}
 local allSubmissions       = {}
 
+local startMpRound = Instance.new("BindableEvent", SS)
+startMpRound.Name = "StartMPRound"
+
+local endMpRound = Instance.new("BindableEvent", SS)
+endMpRound.Name = "EndMPRound"
+
+-- Resets stats at the start of a round
+startMpRound.Event:Connect(function(player)
+	mistakes[player] = {}
+	allSubmissions[player] = {}
+	triaged[player] = {}
+	player:SetAttribute("Score", 0)
+	player:SetAttribute("CorrectCount", 0)
+	player:SetAttribute("WrongCount", 0)
+end)
+
+-- Fires the SessionResult stats normally when a multiplayer round ends
+endMpRound.Event:Connect(function(player)
+	local totalAnswered = (player:GetAttribute("CorrectCount") or 0) + (player:GetAttribute("WrongCount") or 0)
+	sessionRemote:FireClient(player, {
+		totalScore     = player:GetAttribute("Score"),
+		correctCount   = player:GetAttribute("CorrectCount"),
+		wrongCount     = player:GetAttribute("WrongCount"),
+		totalPatients  = totalAnswered,
+		mistakes       = mistakes[player] or {},
+		allSubmissions = allSubmissions[player] or {},
+	})
+end)
+
 sessionEvent.Event:Connect(function(player, count)
 	scenarioPatientCount[player] = count
 	triaged[player]              = {}
@@ -80,27 +109,31 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 	local ss          = math.floor(elapsed % 60)
 	local responseTime = string.format("%02d:%02d", mm, ss)
 
-
 	local correctTriage = targetNPC:GetAttribute("CorrectTriage")
-	local isCorrect     = (chosenTriage == correctTriage)
-	
-	-- [NEW]: Multiplayer Scoring Logic
+	local isTimeout     = (chosenTriage == "TIMEOUT")
+	local isCorrect     = (not isTimeout) and (chosenTriage == correctTriage)
+
+	-- Multiplayer Scoring Logic
 	local pointsDelta = 0
-	local TIME_LIMIT = 15 -- Flexible time limit per patient (in seconds)
+	local TIME_LIMIT = 15
 
 	if player:GetAttribute("InMultiplayer") then
 		if isCorrect then
 			if elapsed <= TIME_LIMIT then
-				pointsDelta = 15 -- Correct & Fast
+				pointsDelta = 15
 			else
-				pointsDelta = 7  -- Correct & Overtime
+				pointsDelta = 7
 			end
 		else
-			pointsDelta = -5     -- Wrong
+			pointsDelta = -5
 		end
 	else
-		-- Standard Singleplayer Scoring
-		pointsDelta = isCorrect and 10 or -5
+		-- Singleplayer Scoring
+		if isTimeout then
+			pointsDelta = -20
+		else
+			pointsDelta = isCorrect and 10 or -5
+		end
 	end
 
 	local currentScore = player:GetAttribute("Score") or 0
@@ -134,7 +167,7 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 		})
 	end
 
-	if isCorrect then
+	if isCorrect or isTimeout then
 		triaged[player][patientId] = true
 		targetNPC:SetAttribute("Triaged", true)
 		local slotIndex = targetNPC:GetAttribute("SlotIndex")
@@ -191,7 +224,7 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 	end
 end)
 
-returnRemote.OnServerEvent:Connect(function(player)
+returnRemote.OnServerEvent:Connect(function(player, skipRespawn)
 	HospitalRegistry.Release(player)
 
 	triaged[player]              = {}
@@ -202,6 +235,9 @@ returnRemote.OnServerEvent:Connect(function(player)
 	player:SetAttribute("CorrectCount",      0)
 	player:SetAttribute("WrongCount",        0)
 	player:SetAttribute("PatientsRemaining", 0)
-	player:LoadCharacterAsync()
 
+	-- [FIX]: Only respawn them if they haven't been kicked already
+	if not skipRespawn then
+		player:LoadCharacterAsync()
+	end
 end)

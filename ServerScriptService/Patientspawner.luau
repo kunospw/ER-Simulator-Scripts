@@ -287,6 +287,18 @@ startMpSpawns.Event:Connect(function(player, hospitalId, slotIndex)
 	end
 end)
 
+-- [NEW]: Safely create the cleanup event
+local cleanupMpSpawns = SS:FindFirstChild("CleanupMPSpawns")
+if not cleanupMpSpawns then
+	cleanupMpSpawns = Instance.new("BindableEvent")
+	cleanupMpSpawns.Name = "CleanupMPSpawns"
+	cleanupMpSpawns.Parent = SS
+end
+
+cleanupMpSpawns.Event:Connect(function(player)
+	cleanupPatients(player)
+end)
+
 patientCleared.Event:Connect(function(player, slotIndex)
 	-- [FIX]: Use AssignedHospitalId to find the room, bypassing ownership rules
 	if player:GetAttribute("InMultiplayer") then

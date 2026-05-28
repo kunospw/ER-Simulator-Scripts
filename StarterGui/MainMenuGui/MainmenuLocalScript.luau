@@ -526,8 +526,8 @@ TweenService:Create(MainMenuFrame,
 
 -- ── Multiplayer Match Start Intercept & Timer HUD ─────────────────────────────
 local MatchStarted = RS:WaitForChild("MultiplayerMatchStarted")
+local MatchEnded   = RS:WaitForChild("MultiplayerMatchEnded") -- [NEW]
 
--- Generate the Timer UI dynamically right inside the Main Menu
 local timerGui = Instance.new("ScreenGui")
 timerGui.Name = "MultiplayerTimerHUD"
 timerGui.ResetOnSpawn = false
@@ -535,7 +535,7 @@ timerGui.Parent = PlayerGui
 
 local timerFrame = Instance.new("Frame")
 timerFrame.Size = UDim2.new(0, 150, 0, 40)
-timerFrame.Position = UDim2.new(0.5, -75, 0, 20) -- Top Center
+timerFrame.Position = UDim2.new(0.5, -75, 0, 20) 
 timerFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 timerFrame.Visible = false
 timerFrame.Parent = timerGui
@@ -550,16 +550,21 @@ timerText.TextSize = 18
 timerText.Text = "01:00"
 timerText.Parent = timerFrame
 
+local currentTimerSequence = 0 -- [FIX]: Tracks the active loop to kill it safely
+
 MatchStarted.OnClientEvent:Connect(function(duration)
-	-- Hide menu & restore controls
 	MainMenuGui.Enabled = false
 	enableControls()
 	if stopMenuCamera then stopMenuCamera() end
 
-	-- Run the Timer
+	currentTimerSequence += 1
+	local mySequence = currentTimerSequence
+
 	timerFrame.Visible = true
 	local timeLeft = duration
-	while timeLeft >= 0 do
+
+	-- [FIX]: The loop will instantly abort if currentTimerSequence changes
+	while timeLeft >= 0 and currentTimerSequence == mySequence do
 		local m = math.floor(timeLeft / 60)
 		local s = timeLeft % 60
 		timerText.Text = string.format("%02d:%02d", m, s)
@@ -573,5 +578,14 @@ MatchStarted.OnClientEvent:Connect(function(duration)
 		task.wait(1)
 		timeLeft -= 1
 	end
+
+	if currentTimerSequence == mySequence then
+		timerFrame.Visible = false
+	end
+end)
+
+-- [FIX]: When the match ends (or someone gets eliminated), kill their timer instantly
+MatchEnded.OnClientEvent:Connect(function()
+	currentTimerSequence += 1 
 	timerFrame.Visible = false
 end)
