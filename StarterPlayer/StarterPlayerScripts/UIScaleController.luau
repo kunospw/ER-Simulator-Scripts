@@ -1,4 +1,4 @@
--- SessionResultController (LocalScript)
+-- UISCaleController (LocalScript)
 -- StarterPlayerScripts
 
 local Players      = game:GetService("Players")
