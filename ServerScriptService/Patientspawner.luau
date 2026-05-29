@@ -282,6 +282,8 @@ startMpSpawns.Event:Connect(function(player, hospitalId, slotIndex)
 	if hospital then
 		local randomPatient = generateRandomPatient()
 		spawnOnePatient(player, randomPatient, slotIndex, hospital.beds)
+		player:SetAttribute("PatientsRemaining", 
+			(player:GetAttribute("PatientsRemaining") or 0) + 1)
 	else
 		warn("[PatientSpawner] Invalid Hospital ID:", hospitalId)
 	end
@@ -299,6 +301,70 @@ cleanupMpSpawns.Event:Connect(function(player)
 	cleanupPatients(player)
 end)
 
+-- ── IoT Add Patient ───────────────────────────────────────────────────────────
+local iotAddPatient = SS:FindFirstChild("IoTAddPatient")
+if not iotAddPatient then
+	iotAddPatient = Instance.new("BindableEvent")
+	iotAddPatient.Name = "IoTAddPatient"
+	iotAddPatient.Parent = SS
+end
+
+iotAddPatient.Event:Connect(function(player)
+	if not spawnedPatients[player] then return end
+
+	local hId = player:GetAttribute("AssignedHospitalId")
+	local hospital = HospitalRegistry.Hospitals[hId]
+	if not hospital then return end
+
+	-- Cari slot yang kosong
+	local emptySlot = nil
+	for i = 1, #hospital.beds do
+		if not spawnedPatients[player][i] then
+			emptySlot = i
+			break
+		end
+	end
+
+	if emptySlot then
+		-- Spawn langsung di slot kosong
+		local randomPatient = generateRandomPatient()
+		spawnOnePatient(player, randomPatient, emptySlot, hospital.beds)
+		player:SetAttribute("PatientsRemaining", 
+			(player:GetAttribute("PatientsRemaining") or 0) + 1)
+		print("[IoT] Added patient to slot", emptySlot, "for", player.Name)
+	else
+		-- Semua slot penuh, masukin ke queue
+		if not patientQueues[player] then patientQueues[player] = {} end
+		table.insert(patientQueues[player], generateRandomPatient())
+		player:SetAttribute("PatientsRemaining", 
+			(player:GetAttribute("PatientsRemaining") or 0) + 1)
+		print("[IoT] All slots full, queued patient for", player.Name)
+	end
+end)
+
+-- ── IoT Remove Patient ────────────────────────────────────────────────────────
+game:GetService("Players").PlayerAdded:Connect(function() end) -- placeholder
+
+local function handleRemovePatient(player)
+	if not patientQueues[player] then return end
+	if #patientQueues[player] > 0 then
+		table.remove(patientQueues[player], #patientQueues[player])
+		player:SetAttribute("PatientsRemaining",
+			math.max(0, (player:GetAttribute("PatientsRemaining") or 1) - 1))
+		print("[IoT] Removed last queued patient for", player.Name)
+	else
+		print("[IoT] Queue empty, nothing to remove for", player.Name)
+	end
+end
+
+game:GetService("Players").PlayerAdded:Connect(function(player)
+	player:GetAttributeChangedSignal("IoTRemovePatient"):Connect(function()
+		if player:GetAttribute("IoTRemovePatient") then
+			player:SetAttribute("IoTRemovePatient", false)
+			handleRemovePatient(player)
+		end
+	end)
+end)
 patientCleared.Event:Connect(function(player, slotIndex)
 	-- [FIX]: Use AssignedHospitalId to find the room, bypassing ownership rules
 	if player:GetAttribute("InMultiplayer") then

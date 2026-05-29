@@ -516,3 +516,75 @@ matchEndedRemote.OnClientEvent:Connect(function()
 	hideToast()
 	if _G.ResetPatientCamera then _G.ResetPatientCamera() end
 end)
+
+-- ── IoT Timer Adjustment ──────────────────────────────────────────────────────
+local iotTimerRemote = RS:WaitForChild("IoTTimerAdjust")
+
+iotTimerRemote.OnClientEvent:Connect(function(delta)
+	if not currentViewedPatientId then return end
+	local state = patientTimers[currentViewedPatientId]
+	if not state then return end
+
+	state.timeLeft = math.clamp(state.timeLeft + delta, 0, 120)
+
+	-- Update the UI immediately if timer is visible
+	local gui = getGui()
+	local timerFrame = gui and gui:FindFirstChild("TimerFrame")
+	local timerLabel = timerFrame and timerFrame:FindFirstChild("TimeText")
+	if timerLabel and timerFrame and timerFrame.Visible then
+		local m = math.floor(state.timeLeft / 60)
+		local s = state.timeLeft % 60
+		timerLabel.Text = string.format("%02d:%02d", m, s)
+	end
+
+	print("[IoT] Timer adjusted by", delta, "→ new time:", state.timeLeft)
+end)
+
+-- ── IoT Notification ──────────────────────────────────────────────────────────
+local iotNotifRemote = RS:WaitForChild("IoTNotification")
+
+local notifColors = {
+	RED    = Color3.fromRGB(239, 68, 68),
+	GREEN  = Color3.fromRGB(34, 197, 94),
+	YELLOW = Color3.fromRGB(234, 179, 8),
+}
+
+iotNotifRemote.OnClientEvent:Connect(function(message, colorKey)
+	local gui = getGui()
+	if not gui then return end
+
+	local notif = Instance.new("Frame")
+	notif.Size = UDim2.new(0, 280, 0, 44)
+	notif.Position = UDim2.new(0.5, -140, 0, -50)
+	notif.BackgroundColor3 = notifColors[colorKey] or notifColors.YELLOW
+	notif.BorderSizePixel = 0
+	notif.ZIndex = 10
+	notif.Parent = gui
+	Instance.new("UICorner", notif).CornerRadius = UDim.new(0, 8)
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -16, 1, 0)
+	label.Position = UDim2.new(0, 8, 0, 0)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 13
+	label.Text = message
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.ZIndex = 11
+	label.Parent = notif
+
+	TweenService:Create(notif,
+		TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+		{ Position = UDim2.new(0.5, -140, 0, 12) }
+	):Play()
+
+	task.delay(3, function()
+		TweenService:Create(notif,
+			TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			{ Position = UDim2.new(0.5, -140, 0, -50) }
+		):Play()
+		task.wait(0.25)
+		notif:Destroy()
+	end)
+end)

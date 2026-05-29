@@ -62,6 +62,7 @@ sessionEvent.Event:Connect(function(player, count)
 	print("[TriageManager] Session started —", player.Name, "—", count, "patients")
 end)
 
+
 Players.PlayerAdded:Connect(function(player)
 	triaged[player]              = {}
 	scenarioPatientCount[player] = 0
