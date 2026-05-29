@@ -187,7 +187,7 @@ triggerRemote.OnServerEvent:Connect(function(player, scenarioId)
 		serverFullRemote:FireClient(player)
 		return
 	end
-
+	player:SetAttribute("CurrentScenarioId", scenarioId)
 	-- Reset cinematic NPCs ke posisi awal sebelum cinematic jalan
 	resetCinematicNPCs(hospital.id)
 

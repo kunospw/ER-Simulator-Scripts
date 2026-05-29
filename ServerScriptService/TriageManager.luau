@@ -13,6 +13,7 @@ local returnRemote   = RS:WaitForChild("ReturnToMenu")
 local patientCleared = SS:WaitForChild("PatientCleared")
 local sessionEvent   = ServerStorage:WaitForChild("PatientSessionStarted")
 local HospitalRegistry = require(SS:WaitForChild("HospitalRegistry"))
+local DataStoreManager = require(SS:WaitForChild("DataStoreManager"))
 
 local triaged              = {}
 local scenarioPatientCount = {}
@@ -70,6 +71,7 @@ Players.PlayerAdded:Connect(function(player)
 	player:SetAttribute("CorrectCount",      0)
 	player:SetAttribute("WrongCount",        0)
 	player:SetAttribute("PatientsRemaining", 0)
+	DataStoreManager.InitPlayer(player)
 
 end)
 
@@ -212,6 +214,24 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 		if totalPatients > 0 and totalTriaged >= totalPatients then
 			print("[TriageManager] SCENARIO COMPLETE!")
 			task.wait(2.5)
+			local scenario = require(RS:WaitForChild("ScenarioData")).GetScenario(
+				player:GetAttribute("CurrentScenarioId") or "food_poisoning")
+			local totalAnswered = (player:GetAttribute("CorrectCount") or 0) 
+				+ (player:GetAttribute("WrongCount") or 0)
+			local accuracy = totalAnswered > 0 
+				and ((player:GetAttribute("CorrectCount") or 0) / totalAnswered * 100) or 0
+			task.spawn(function()
+				DataStoreManager.SaveSession(player, {
+					scenarioId     = player:GetAttribute("CurrentScenarioId") or "",
+					mode           = scenario and scenario.mode or "",
+					totalScore     = player:GetAttribute("Score"),
+					accuracy       = accuracy,
+					correctCount   = player:GetAttribute("CorrectCount"),
+					wrongCount     = player:GetAttribute("WrongCount"),
+					totalPatients  = totalPatients,
+					allSubmissions = allSubmissions[player],
+				})
+			end)
 			sessionRemote:FireClient(player, {
 				totalScore     = player:GetAttribute("Score"),
 				correctCount   = player:GetAttribute("CorrectCount"),
