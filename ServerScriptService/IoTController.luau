@@ -75,31 +75,44 @@ local function handleCommand(action)
 	end
 end
 
-task.spawn(function()
-	while true do
-		task.wait(POLL_INTERVAL)
-		local ok, result = pcall(function()
-			return HttpService:GetAsync(POLL_URL)
-		end)
-		if ok and result then
-			local ok2, data = pcall(function()
-				return HttpService:JSONDecode(result)
-			end)
-			if ok2 and data and data.action then
-				-- DEBUG: fire notif ke semua player buat confirm command diterima
-				for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
-					iotNotifRemote:FireClient(player, 
-						"DEBUG: Got " .. data.action, "YELLOW")
-				end
-				handleCommand(data.action)
-			end
-		else
-			if not ok then
-				for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
-					iotNotifRemote:FireClient(player, 
-						"DEBUG: Poll failed", "RED")
-				end
-			end
-		end
-	end
+--task.spawn(function()
+--	while true do
+--		task.wait(POLL_INTERVAL)
+--		local ok, result = pcall(function()
+--			return HttpService:GetAsync(POLL_URL)
+--		end)
+--		if ok and result then
+--			local ok2, data = pcall(function()
+--				return HttpService:JSONDecode(result)
+--			end)
+--			if ok2 and data and data.action then
+--				-- DEBUG: fire notif ke semua player buat confirm command diterima
+--				for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+--					iotNotifRemote:FireClient(player, 
+--						"DEBUG: Got " .. data.action, "YELLOW")
+--				end
+--				handleCommand(data.action)
+--			end
+--		else
+--			if not ok then
+--				for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+--					iotNotifRemote:FireClient(player, 
+--						"DEBUG: Poll failed", "RED")
+--				end
+--			end
+--		end
+--	end
+--end)
+
+-- Debug remote
+local iotDebugFire = RS:FindFirstChild("IoTDebugFire")
+if not iotDebugFire then
+	iotDebugFire = Instance.new("RemoteEvent")
+	iotDebugFire.Name = "IoTDebugFire"
+	iotDebugFire.Parent = RS
+end
+
+iotDebugFire.OnServerEvent:Connect(function(player, action)
+	print("[IoTDebug] Fired by", player.Name, ":", action)
+	handleCommand(action)
 end)
