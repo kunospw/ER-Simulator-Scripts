@@ -15,7 +15,12 @@ if not iotTimerRemote then
 	iotTimerRemote.Name = "IoTTimerAdjust"
 	iotTimerRemote.Parent = RS
 end
-
+local iotGlobalTimerRemote = RS:FindFirstChild("IoTGlobalTimer")
+if not iotGlobalTimerRemote then
+	iotGlobalTimerRemote = Instance.new("RemoteEvent")
+	iotGlobalTimerRemote.Name = "IoTGlobalTimer"
+	iotGlobalTimerRemote.Parent = RS
+end
 local iotNotifRemote = RS:FindFirstChild("IoTNotification")
 if not iotNotifRemote then
 	iotNotifRemote = Instance.new("RemoteEvent")
@@ -63,13 +68,13 @@ local function handleCommand(action)
 
 	elseif action == "ADD_TIME" then
 		for _, player in ipairs(players) do
-			iotTimerRemote:FireClient(player, 30)
+			iotGlobalTimerRemote:FireClient(player, 30)
 			iotNotifRemote:FireClient(player, "⏱️ +30 detik ditambahkan!", "GREEN")
 		end
 
 	elseif action == "REMOVE_TIME" then
 		for _, player in ipairs(players) do
-			iotTimerRemote:FireClient(player, -30)
+			iotGlobalTimerRemote:FireClient(player, -30)
 			iotNotifRemote:FireClient(player, "⏱️ -30 detik dikurangi!", "RED")
 		end
 	end

@@ -346,15 +346,35 @@ end)
 game:GetService("Players").PlayerAdded:Connect(function() end) -- placeholder
 
 local function handleRemovePatient(player)
-	if not patientQueues[player] then return end
-	if #patientQueues[player] > 0 then
+	local hId = player:GetAttribute("AssignedHospitalId")
+	local hospital = hId and HospitalRegistry.Hospitals[hId]
+	if not hospital then return end
+
+	-- Coba hapus dari queue dulu
+	if patientQueues[player] and #patientQueues[player] > 0 then
 		table.remove(patientQueues[player], #patientQueues[player])
 		player:SetAttribute("PatientsRemaining",
 			math.max(0, (player:GetAttribute("PatientsRemaining") or 1) - 1))
 		print("[IoT] Removed last queued patient for", player.Name)
-	else
-		print("[IoT] Queue empty, nothing to remove for", player.Name)
+		return
 	end
+
+	-- Queue kosong, hapus pasien spawned yang belum di-triage dari slot terakhir
+	if not spawnedPatients[player] then return end
+
+	for i = #hospital.beds, 1, -1 do
+		local npc = spawnedPatients[player][i]
+		if npc and npc.Parent and not npc:GetAttribute("Triaged") then
+			npc:Destroy()
+			spawnedPatients[player][i] = nil
+			player:SetAttribute("PatientsRemaining",
+				math.max(0, (player:GetAttribute("PatientsRemaining") or 1) - 1))
+			print("[IoT] Removed spawned patient from slot", i, "for", player.Name)
+			return
+		end
+	end
+
+	print("[IoT] No removable patient found for", player.Name)
 end
 
 game:GetService("Players").PlayerAdded:Connect(function(player)

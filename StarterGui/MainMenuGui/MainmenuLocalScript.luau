@@ -560,17 +560,25 @@ MatchStarted.OnClientEvent:Connect(function(duration)
 	currentTimerSequence += 1
 	local mySequence = currentTimerSequence
 
+	player:SetAttribute("MPTimerDelta", 0) -- reset delta tiap round baru
+
 	timerFrame.Visible = true
 	local timeLeft = duration
 
-	-- [FIX]: The loop will instantly abort if currentTimerSequence changes
 	while timeLeft >= 0 and currentTimerSequence == mySequence do
+		-- Cek IoT delta
+		local delta = player:GetAttribute("MPTimerDelta") or 0
+		if delta ~= 0 then
+			timeLeft = math.clamp(timeLeft + delta, 0, 600)
+			player:SetAttribute("MPTimerDelta", 0)
+		end
+
 		local m = math.floor(timeLeft / 60)
 		local s = timeLeft % 60
 		timerText.Text = string.format("%02d:%02d", m, s)
 
 		if timeLeft <= 10 then
-			timerText.TextColor3 = Color3.fromRGB(239, 68, 68) 
+			timerText.TextColor3 = Color3.fromRGB(239, 68, 68)
 		else
 			timerText.TextColor3 = Color3.new(1, 1, 1)
 		end
@@ -582,6 +590,11 @@ MatchStarted.OnClientEvent:Connect(function(duration)
 	if currentTimerSequence == mySequence then
 		timerFrame.Visible = false
 	end
+end)
+
+local iotGlobalTimerRemote = RS:WaitForChild("IoTGlobalTimer")
+iotGlobalTimerRemote.OnClientEvent:Connect(function(delta)
+	player:SetAttribute("MPTimerDelta", (player:GetAttribute("MPTimerDelta") or 0) + delta)
 end)
 
 -- [FIX]: When the match ends (or someone gets eliminated), kill their timer instantly
