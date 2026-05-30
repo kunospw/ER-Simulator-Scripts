@@ -24,11 +24,7 @@ startRemote.OnClientEvent:Connect(function()
 	patientTimers = {}
 	currentViewedPatientId = nil
 end)
-local triggerRemote = RS:WaitForChild("TriggerCinematic")
-triggerRemote.OnClientEvent:Connect(function()
-	patientTimers = {}
-	currentViewedPatientId = nil
-end)
+
 -- ── Tooltip data ──────────────────────────────────────────────────────────────
 local TIPS = {
 	Breathing = {

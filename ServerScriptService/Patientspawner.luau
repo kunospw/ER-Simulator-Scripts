@@ -184,6 +184,13 @@ local function spawnOnePatient(player, patientData, slotIndex, beds)
 
 		local conn = prompt.Triggered:Connect(function(triggeringPlayer)
 			if triggeringPlayer ~= player then return end
+
+			-- Set SpawnTime saat pertama kali diperiksa
+			if not npc:GetAttribute("ExamineStarted") then
+				npc:SetAttribute("ExamineStarted", true)
+				npc:SetAttribute("SpawnTime", os.clock())
+			end
+
 			focusRemote:FireClient(player, npc)
 			showUIRemote:FireClient(player, npc)
 		end)

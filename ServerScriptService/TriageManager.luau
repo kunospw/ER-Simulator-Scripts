@@ -119,7 +119,8 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 	-- Multiplayer Scoring Logic
 	local pointsDelta = 0
 	local TIME_LIMIT = 15
-
+	print(string.format("[TriageManager] %s | patient: %s | chosen: %s | correct: %s | elapsed: %.1fs | points: %d",
+		player.Name, patientId, chosenTriage, correctTriage, elapsed, pointsDelta))
 	if player:GetAttribute("InMultiplayer") then
 		if isCorrect then
 			if elapsed <= TIME_LIMIT then
