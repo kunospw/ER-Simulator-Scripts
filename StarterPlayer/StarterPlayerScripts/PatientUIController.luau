@@ -18,10 +18,17 @@ local currentViewedPatientId = nil
 local startRemote = RS:WaitForChild("StartCutscene")
 
 startRemote.OnClientEvent:Connect(function()
-	-- Wipe the timer dictionary clean every time a new scenario starts
+	for _, state in pairs(patientTimers) do
+		state.running = false
+	end
 	patientTimers = {}
+	currentViewedPatientId = nil
 end)
-
+local triggerRemote = RS:WaitForChild("TriggerCinematic")
+triggerRemote.OnClientEvent:Connect(function()
+	patientTimers = {}
+	currentViewedPatientId = nil
+end)
 -- ── Tooltip data ──────────────────────────────────────────────────────────────
 local TIPS = {
 	Breathing = {

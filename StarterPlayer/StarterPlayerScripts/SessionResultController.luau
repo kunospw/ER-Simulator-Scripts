@@ -67,12 +67,14 @@ local function buildPerformanceRow(scrollFrame, rowTemplate, data, index)
 
 	local pointsText = row:FindFirstChild("PointsText")
 	if pointsText then
-		pointsText.Text       = data.isCorrect and "+10" or "-5"
-		pointsText.TextColor3 = data.isCorrect
-			and Color3.fromRGB(34, 197, 94)
-			or  Color3.fromRGB(239, 68, 68)
+		if data.isCorrect then
+			pointsText.Text = "+" .. tostring(data.points)
+			pointsText.TextColor3 = Color3.fromRGB(34, 197, 94)
+		else
+			pointsText.Text = tostring(data.points)
+			pointsText.TextColor3 = Color3.fromRGB(239, 68, 68)
+		end
 	end
-
 	row.Parent = scrollFrame
 end
 

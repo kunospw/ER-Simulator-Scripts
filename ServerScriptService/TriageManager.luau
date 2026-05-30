@@ -134,8 +134,14 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 		-- Singleplayer Scoring
 		if isTimeout then
 			pointsDelta = -20
+		elseif isCorrect then
+			if elapsed <= TIME_LIMIT then
+				pointsDelta = 15 
+			else
+				pointsDelta = 10
+			end
 		else
-			pointsDelta = isCorrect and 10 or -5
+			pointsDelta = -5
 		end
 	end
 
