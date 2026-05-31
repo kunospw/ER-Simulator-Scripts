@@ -1,3 +1,4 @@
+-- IoTServer.lua (ServerScriptService)
 local RS = game:GetService("ReplicatedStorage")
 
 local event = Instance.new("RemoteEvent")
