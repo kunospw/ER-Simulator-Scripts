@@ -1,4 +1,4 @@
--- IoTController (Script) — ServerScriptService
+-- IoTController (Script) — ServerScriptService (Disabled/No longer used)
 local HttpService   = game:GetService("HttpService")
 local SS            = game:GetService("ServerStorage")
 local RS            = game:GetService("ReplicatedStorage")

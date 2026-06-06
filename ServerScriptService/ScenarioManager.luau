@@ -188,6 +188,12 @@ triggerRemote.OnServerEvent:Connect(function(player, scenarioId)
 		return
 	end
 	player:SetAttribute("CurrentScenarioId", scenarioId)
+	local ScenarioData = require(RS:WaitForChild("ScenarioData"))
+	local scenario = ScenarioData.GetScenario(scenarioId)
+	if scenario then
+		player:SetAttribute("CurrentScenarioMode", scenario.mode or "")
+	end
+	
 	-- Reset cinematic NPCs ke posisi awal sebelum cinematic jalan
 	resetCinematicNPCs(hospital.id)
 

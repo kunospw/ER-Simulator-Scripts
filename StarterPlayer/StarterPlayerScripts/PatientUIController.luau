@@ -486,6 +486,44 @@ triageResultRemote.OnClientEvent:Connect(function(feedback)
 	if _G.ResetPatientCamera then _G.ResetPatientCamera() end
 end)
 
+local vitalsUpdatedRemote = RS:WaitForChild("VitalsUpdated")
+
+vitalsUpdatedRemote.OnClientEvent:Connect(function(patientId, newVitals)
+	-- Cek apakah player lagi examine pasien ini
+	if currentViewedPatientId ~= patientId then return end
+
+	local gui = getGui()
+	if not gui then return end
+
+	local infoFrame = gui:FindFirstChild("PatientInfoFrame")
+	if not infoFrame or not infoFrame.Visible then return end
+
+	local body    = infoFrame:FindFirstChild("InfoBody")
+	if not body then return end
+
+	local cardRow = body:FindFirstChild("STARTCardRow")
+	if not cardRow then return end
+
+	local rrNum = tonumber((newVitals.breathing or "0"):match("%d+")) or 0
+
+	local bCard = cardRow:FindFirstChild("BreathingCard")
+	local pCard = cardRow:FindFirstChild("PerfusionCard")
+	local mCard = cardRow:FindFirstChild("MentalCard")
+
+	if bCard then
+		bCard.Text       = "Pernapasan\n" .. (newVitals.breathing or "?")
+		bCard.TextColor3 = vitalColor(rrNum, "rr")
+	end
+	if pCard then
+		pCard.Text       = "Perfusi\n" .. (newVitals.perfusion or "?")
+		pCard.TextColor3 = vitalColor(newVitals.perfusion or "Normal", "crt")
+	end
+	if mCard then
+		mCard.Text       = "Mental\n" .. (newVitals.mental or "?")
+		mCard.TextColor3 = vitalColor(newVitals.mental or "Sadar", "mental")
+	end
+end)
+
 -- ── Live UI Updates (Runs independently of the Patient Menu) ──────────────────
 player:GetAttributeChangedSignal("PatientsRemaining"):Connect(function()
 	local gui = getGui()

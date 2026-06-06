@@ -1,4 +1,11 @@
 -- PatientSpawner (Script) — ServerScriptService
+-- CHANGE LOG (deterioration update):
+--   - Added startDeteriorationLoop() per patient
+--   - Vitals degrade over time based on DeteriorationRate attribute
+--   - CorrectTriage re-evaluated via START on each tick
+--   - Animation updated if GCS crosses threshold
+--   - Client notified via VitalsUpdated remote if player is currently examining
+
 local Players    = game:GetService("Players")
 local RS         = game:GetService("ReplicatedStorage")
 local SS         = game:GetService("ServerStorage")
@@ -9,7 +16,16 @@ local showUIRemote     = RS:WaitForChild("ShowPatientUI")
 local toggleRemote     = RS:WaitForChild("TogglePrompt")
 local serverFullRemote = RS:WaitForChild("ServerFull")
 
+-- NEW: notify client when vitals change while they're examining
+local vitalsUpdatedRemote = RS:FindFirstChild("VitalsUpdated")
+if not vitalsUpdatedRemote then
+	vitalsUpdatedRemote = Instance.new("RemoteEvent")
+	vitalsUpdatedRemote.Name = "VitalsUpdated"
+	vitalsUpdatedRemote.Parent = RS
+end
+
 local ScenarioData     = require(RS:WaitForChild("ScenarioData"))
+local PatientGenerator = require(RS:WaitForChild("PatientGenerator"))
 local HospitalRegistry = require(SS:WaitForChild("HospitalRegistry"))
 
 local patientCleared = SS:WaitForChild("PatientCleared")
@@ -29,6 +45,26 @@ end
 local spawnedPatients   = {}
 local patientQueues     = {}
 local promptConnections = {}
+
+-- ── START re-evaluation ───────────────────────────────────────────────────────
+local function applySTART(rr, crt, gcs)
+	if rr == 0 then return "BLACK" end
+	if rr > 30 then return "RED" end
+	if crt == "Terlambat" then return "RED" end
+	if gcs < 13 then return "RED" end
+	return "YELLOW"
+end
+
+-- ── Animation ─────────────────────────────────────────────────────────────────
+local function getAnimIdForGCS(gcs)
+	if gcs <= 10 then
+		return "rbxassetid://108659019409982"
+	elseif gcs <= 14 then
+		return "rbxassetid://114133933934433"
+	else
+		return "rbxassetid://108659019409982"
+	end
+end
 
 local function applyPose(npc, pose, slotPosition)
 	local humanoid = npc:FindFirstChildOfClass("Humanoid")
@@ -69,15 +105,7 @@ local function playPatientAnim(npc, gcs)
 	local humanoid = npc:FindFirstChildOfClass("Humanoid")
 	if not humanoid then return end
 
-	local animId
-	if gcs <= 10 then
-		animId = "rbxassetid://108659019409982"
-	elseif gcs <= 14 then
-		animId = "rbxassetid://114133933934433"
-	else
-		animId = "rbxassetid://108659019409982"
-	end
-
+	local animId = getAnimIdForGCS(gcs)
 	local anim = Instance.new("Animation")
 	anim.AnimationId = animId
 
@@ -85,6 +113,11 @@ local function playPatientAnim(npc, gcs)
 	if not animator then
 		animator = Instance.new("Animator")
 		animator.Parent = humanoid
+	end
+
+	-- Stop existing tracks first
+	for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+		track:Stop()
 	end
 
 	local track = animator:LoadAnimation(anim)
@@ -101,7 +134,93 @@ local function hideNameplate(npc)
 	end
 end
 
--- Cleanup patients only — tidak release hospital
+-- ── Deterioration loop ────────────────────────────────────────────────────────
+-- Called once per patient after spawn. Runs until triaged or destroyed.
+-- interval = 60 / deteriorationRate (faster rate = shorter interval)
+local function startDeteriorationLoop(npc, owner, scenarioMode)
+	local rate = npc:GetAttribute("DeteriorationRate") or 0
+	if rate <= 0 then return end                          -- GREEN / BLACK: skip
+	if scenarioMode == "Training Mode" then return end    -- Training: skip
+
+	local interval = math.floor(60 / rate)               -- seconds between ticks
+	interval = math.clamp(interval, 30, 300)             -- floor 30s, cap 5min
+
+	print(string.format("[Deterioration] Starting for %s | rate=%.1f | interval=%ds",
+		npc.Name, rate, interval))
+
+	task.spawn(function()
+		while true do
+			task.wait(interval)
+
+			-- Stop if patient gone or already triaged
+			if not npc or not npc.Parent then break end
+			if npc:GetAttribute("Triaged") then break end
+
+			-- Read current vitals from attributes
+			local rrStr = npc:GetAttribute("Breathing") or "0x/mnt"
+			local rr    = tonumber(rrStr:match("%d+")) or 0
+			local gcs   = npc:GetAttribute("GCS") or 15
+			local perf  = npc:GetAttribute("Perfusion") or "Normal"
+			local hr    = npc:GetAttribute("HR") or 80
+			local crt   = (perf == "Terlambat") and "Terlambat" or "Normal"
+
+			-- Already BLACK: stop
+			if rr == 0 and gcs <= 3 then break end
+
+			-- Degrade vitals
+			-- RR: +1 to +3 per tick
+			local rrDelta = math.random(1, 3)
+			rr = math.min(rr + rrDelta, 40)
+
+			-- GCS: -1 per tick (sometimes -2 for high rate patients)
+			local gcsDelta = rate >= 0.8 and math.random(1, 2) or 1
+			gcs = math.max(gcs - gcsDelta, 3)
+
+			-- HR: +3 to +8 per tick
+			hr = math.min(hr + math.random(3, 8), 160)
+
+			-- CRT: becomes Terlambat when GCS drops below 12 or RR > 28
+			if gcs < 12 or rr > 28 then
+				crt = "Terlambat"
+			end
+
+			-- Re-run START
+			local newTriage = applySTART(rr, crt, gcs)
+
+			-- Update NPC attributes
+			npc:SetAttribute("Breathing", tostring(rr) .. "x/mnt")
+			npc:SetAttribute("GCS",       gcs)
+			npc:SetAttribute("HR",        hr)
+			npc:SetAttribute("Perfusion", crt == "Terlambat" and "Terlambat" or "Normal")
+			npc:SetAttribute("Mental",    gcs >= 13 and "Sadar" or "Terganggu")
+			npc:SetAttribute("CorrectTriage", newTriage)
+
+			-- Update animation if GCS crossed a threshold
+			local prevAnimId = getAnimIdForGCS(gcs + gcsDelta) -- what it was before
+			local newAnimId  = getAnimIdForGCS(gcs)
+			if newAnimId ~= prevAnimId then
+				playPatientAnim(npc, gcs)
+			end
+
+			-- Notify client if they're currently examining this patient
+			if owner and owner.Parent then
+				local patientId = npc:GetAttribute("PatientID")
+				vitalsUpdatedRemote:FireClient(owner, patientId, {
+					breathing = tostring(rr) .. "x/mnt",
+					perfusion = crt == "Terlambat" and "Terlambat" or "Normal",
+					mental    = gcs >= 13 and "Sadar" or "Terganggu",
+					gcs       = gcs,
+					hr        = hr,
+				})
+			end
+
+			print(string.format("[Deterioration] %s → RR:%d GCS:%d CRT:%s Triage:%s",
+				npc.Name, rr, gcs, crt, newTriage))
+		end
+	end)
+end
+
+-- ── Cleanup ───────────────────────────────────────────────────────────────────
 local function cleanupPatients(player)
 	if promptConnections[player] then
 		for _, conn in ipairs(promptConnections[player]) do conn:Disconnect() end
@@ -116,13 +235,13 @@ local function cleanupPatients(player)
 	patientQueues[player] = nil
 end
 
--- Full cleanup termasuk release hospital — dipanggil saat player leaving/return to menu
 local function cleanupPlayer(player)
 	HospitalRegistry.Release(player)
 	cleanupPatients(player)
 end
 
-local function spawnOnePatient(player, patientData, slotIndex, beds)
+-- ── Spawn one patient ─────────────────────────────────────────────────────────
+local function spawnOnePatient(player, patientData, slotIndex, beds, scenarioMode)
 	local slot = beds[slotIndex]
 	if not slot then return end
 
@@ -133,14 +252,16 @@ local function spawnOnePatient(player, patientData, slotIndex, beds)
 
 	npc:PivotTo(CFrame.new(slot.position) * CFrame.Angles(0, math.rad(slot.yRot), 0))
 
-	npc:SetAttribute("PatientID",     patientData.id or string.format("P%03d", slotIndex))
-	npc:SetAttribute("CorrectTriage", patientData.correctTriage or "RED")
-	npc:SetAttribute("TargetRoom",    patientData.targetRoom or "")
-	npc:SetAttribute("Pose",          slot.pose)
-	npc:SetAttribute("Diagnosis",     patientData.diagnosis or "")
-	npc:SetAttribute("Complaint",     patientData.complaint or "Keluhan tidak tersedia.")
-	npc:SetAttribute("SlotIndex",     slotIndex)
-	npc:SetAttribute("SpawnTime",     os.clock())
+	npc:SetAttribute("PatientID",         patientData.id or string.format("P%03d", slotIndex))
+	npc:SetAttribute("CorrectTriage",     patientData.correctTriage or "RED")
+	npc:SetAttribute("TargetRoom",        patientData.targetRoom or "")
+	npc:SetAttribute("Pose",              slot.pose)
+	npc:SetAttribute("Diagnosis",         patientData.diagnosis or "")
+	npc:SetAttribute("ConditionName",     patientData.conditionName or "")
+	npc:SetAttribute("Complaint",         patientData.complaint or "Keluhan tidak tersedia.")
+	npc:SetAttribute("SlotIndex",         slotIndex)
+	npc:SetAttribute("SpawnTime",         os.clock())
+	npc:SetAttribute("DeteriorationRate", patientData.deteriorationRate or 0)
 
 	local vitals    = patientData.vitals or {}
 	local crt       = vitals.crt or ""
@@ -170,6 +291,10 @@ local function spawnOnePatient(player, patientData, slotIndex, beds)
 
 		task.wait(0.1)
 		if hrp then hrp.Anchored = true end
+
+		-- Start deterioration after pose + anim settled
+		task.wait(1)
+		startDeteriorationLoop(npc, player, scenarioMode or "")
 	end)
 
 	local head = npc:FindFirstChild("Head")
@@ -185,7 +310,6 @@ local function spawnOnePatient(player, patientData, slotIndex, beds)
 		local conn = prompt.Triggered:Connect(function(triggeringPlayer)
 			if triggeringPlayer ~= player then return end
 
-			-- Set SpawnTime saat pertama kali diperiksa
 			if not npc:GetAttribute("ExamineStarted") then
 				npc:SetAttribute("ExamineStarted", true)
 				npc:SetAttribute("SpawnTime", os.clock())
@@ -200,6 +324,7 @@ local function spawnOnePatient(player, patientData, slotIndex, beds)
 	spawnedPatients[player][slotIndex] = npc
 end
 
+-- ── Scenario spawn ────────────────────────────────────────────────────────────
 local function spawnPatientsForScenario(player, scenarioId)
 	local scenario = ScenarioData.GetScenario(scenarioId)
 	if not scenario then
@@ -207,7 +332,6 @@ local function spawnPatientsForScenario(player, scenarioId)
 		return
 	end
 
-	-- Hospital udah di-assign di ScenarioManager, tinggal get aja
 	local hospital = HospitalRegistry.GetByPlayer(player)
 	if not hospital then
 		warn("[PatientSpawner] No hospital found for", player.Name)
@@ -215,10 +339,8 @@ local function spawnPatientsForScenario(player, scenarioId)
 		return
 	end
 
-	-- Cleanup patients lama tapi JANGAN release hospital
 	cleanupPatients(player)
 
-	-- Teleport player ke hospital
 	local character = player.Character
 	if character then
 		local hrp = character:FindFirstChild("HumanoidRootPart")
@@ -230,9 +352,10 @@ local function spawnPatientsForScenario(player, scenarioId)
 	spawnedPatients[player]   = {}
 	promptConnections[player] = {}
 
-	local patients = scenario.patients or {}
-	local beds     = hospital.beds
-	local maxSlots = #beds
+	local patients   = scenario.patients or {}
+	local beds       = hospital.beds
+	local maxSlots   = #beds
+	local mode       = scenario.mode or ""
 
 	local firstWave = {}
 	local queue     = {}
@@ -246,7 +369,7 @@ local function spawnPatientsForScenario(player, scenarioId)
 	patientQueues[player] = queue
 
 	for _, entry in ipairs(firstWave) do
-		spawnOnePatient(player, entry.data, entry.slotIndex, beds)
+		spawnOnePatient(player, entry.data, entry.slotIndex, beds, mode)
 	end
 
 	local totalSpawned = #patients
@@ -255,24 +378,23 @@ local function spawnPatientsForScenario(player, scenarioId)
 		sessionEvent:Fire(player, totalSpawned)
 	end
 
-	print(string.format("[PatientSpawner] Player %s → Hospital %d | Spawned %d/%d patients (queue: %d)",
-		player.Name, hospital.id, #firstWave, totalSpawned, #queue))
+	print(string.format("[PatientSpawner] Player %s → Hospital %d | Spawned %d/%d patients (queue: %d) | Mode: %s",
+		player.Name, hospital.id, #firstWave, totalSpawned, #queue, mode))
 end
 
--- Helper function to generate a random patient for Multiplayer
-local function generateRandomPatient()
-	local triages = {"RED", "YELLOW", "GREEN", "BLACK"}
-	return {
-		id = "MP_" .. math.random(1000, 9999),
-		name = "Korban Darurat",
-		gender = math.random() > 0.5 and "Laki-laki" or "Perempuan",
-		correctTriage = triages[math.random(#triages)],
-		diagnosis = "Multiplayer Victim",
-		vitals = { rr = 20, crt = "<2 detik", gcs = 15 }
-	}
+-- ── Helpers ───────────────────────────────────────────────────────────────────
+local function getScenarioIdForPlayer(player)
+	return player:GetAttribute("CurrentScenarioId") or "food_poisoning"
 end
 
--- [FIX]: Safely get OR create the event immediately so the script doesn't freeze
+local function getScenarioModeForPlayer(player)
+	local sid = getScenarioIdForPlayer(player)
+	local scenario = ScenarioData.GetScenario and nil -- don't re-generate
+	-- Read mode from attribute set at session start
+	return player:GetAttribute("CurrentScenarioMode") or ""
+end
+
+-- ── startMpSpawns ─────────────────────────────────────────────────────────────
 local startMpSpawns = SS:FindFirstChild("StartMPSpawns")
 if not startMpSpawns then
 	startMpSpawns = Instance.new("BindableEvent")
@@ -281,22 +403,21 @@ if not startMpSpawns then
 end
 
 startMpSpawns.Event:Connect(function(player, hospitalId, slotIndex)
-	-- Safely initialize tables without overwriting existing ones
 	if not spawnedPatients[player] then spawnedPatients[player] = {} end
 	if not promptConnections[player] then promptConnections[player] = {} end
 
 	local hospital = HospitalRegistry.Hospitals[hospitalId]
 	if hospital then
-		local randomPatient = generateRandomPatient()
-		spawnOnePatient(player, randomPatient, slotIndex, hospital.beds)
-		player:SetAttribute("PatientsRemaining", 
+		local randomPatient = PatientGenerator.GenerateOne(getScenarioIdForPlayer(player))
+		spawnOnePatient(player, randomPatient, slotIndex, hospital.beds, getScenarioModeForPlayer(player))
+		player:SetAttribute("PatientsRemaining",
 			(player:GetAttribute("PatientsRemaining") or 0) + 1)
 	else
 		warn("[PatientSpawner] Invalid Hospital ID:", hospitalId)
 	end
 end)
 
--- [NEW]: Safely create the cleanup event
+-- ── cleanupMpSpawns ───────────────────────────────────────────────────────────
 local cleanupMpSpawns = SS:FindFirstChild("CleanupMPSpawns")
 if not cleanupMpSpawns then
 	cleanupMpSpawns = Instance.new("BindableEvent")
@@ -323,7 +444,6 @@ iotAddPatient.Event:Connect(function(player)
 	local hospital = HospitalRegistry.Hospitals[hId]
 	if not hospital then return end
 
-	-- Cari slot yang kosong
 	local emptySlot = nil
 	for i = 1, #hospital.beds do
 		if not spawnedPatients[player][i] then
@@ -333,31 +453,28 @@ iotAddPatient.Event:Connect(function(player)
 	end
 
 	if emptySlot then
-		-- Spawn langsung di slot kosong
-		local randomPatient = generateRandomPatient()
-		spawnOnePatient(player, randomPatient, emptySlot, hospital.beds)
-		player:SetAttribute("PatientsRemaining", 
+		local randomPatient = PatientGenerator.GenerateOne(getScenarioIdForPlayer(player))
+		spawnOnePatient(player, randomPatient, emptySlot, hospital.beds, getScenarioModeForPlayer(player))
+		player:SetAttribute("PatientsRemaining",
 			(player:GetAttribute("PatientsRemaining") or 0) + 1)
 		print("[IoT] Added patient to slot", emptySlot, "for", player.Name)
 	else
-		-- Semua slot penuh, masukin ke queue
 		if not patientQueues[player] then patientQueues[player] = {} end
-		table.insert(patientQueues[player], generateRandomPatient())
-		player:SetAttribute("PatientsRemaining", 
+		table.insert(patientQueues[player], PatientGenerator.GenerateOne(getScenarioIdForPlayer(player)))
+		player:SetAttribute("PatientsRemaining",
 			(player:GetAttribute("PatientsRemaining") or 0) + 1)
 		print("[IoT] All slots full, queued patient for", player.Name)
 	end
 end)
 
 -- ── IoT Remove Patient ────────────────────────────────────────────────────────
-game:GetService("Players").PlayerAdded:Connect(function() end) -- placeholder
+game:GetService("Players").PlayerAdded:Connect(function() end)
 
 local function handleRemovePatient(player)
 	local hId = player:GetAttribute("AssignedHospitalId")
 	local hospital = hId and HospitalRegistry.Hospitals[hId]
 	if not hospital then return end
 
-	-- Coba hapus dari queue dulu
 	if patientQueues[player] and #patientQueues[player] > 0 then
 		table.remove(patientQueues[player], #patientQueues[player])
 		player:SetAttribute("PatientsRemaining",
@@ -366,7 +483,6 @@ local function handleRemovePatient(player)
 		return
 	end
 
-	-- Queue kosong, hapus pasien spawned yang belum di-triage dari slot terakhir
 	if not spawnedPatients[player] then return end
 
 	for i = #hospital.beds, 1, -1 do
@@ -392,21 +508,20 @@ game:GetService("Players").PlayerAdded:Connect(function(player)
 		end
 	end)
 end)
+
+-- ── patientCleared ────────────────────────────────────────────────────────────
 patientCleared.Event:Connect(function(player, slotIndex)
-	-- [FIX]: Use AssignedHospitalId to find the room, bypassing ownership rules
 	if player:GetAttribute("InMultiplayer") then
 		task.wait(1.2)
 		local hId = player:GetAttribute("AssignedHospitalId")
 		local hospital = HospitalRegistry.Hospitals[hId]
-
 		if hospital then
-			local randomPatient = generateRandomPatient()
-			spawnOnePatient(player, randomPatient, slotIndex, hospital.beds)
+			local randomPatient = PatientGenerator.GenerateOne(getScenarioIdForPlayer(player))
+			spawnOnePatient(player, randomPatient, slotIndex, hospital.beds, getScenarioModeForPlayer(player))
 		end
 		return
 	end
 
-	-- Standard Singleplayer Logic
 	local hospital = HospitalRegistry.GetByPlayer(player)
 	if not hospital then return end
 
@@ -415,9 +530,10 @@ patientCleared.Event:Connect(function(player, slotIndex)
 
 	task.wait(1.2)
 	local nextPatient = table.remove(queue, 1)
-	spawnOnePatient(player, nextPatient, slotIndex, hospital.beds)
+	spawnOnePatient(player, nextPatient, slotIndex, hospital.beds, getScenarioModeForPlayer(player))
 end)
 
+-- ── toggleRemote ──────────────────────────────────────────────────────────────
 toggleRemote.OnServerEvent:Connect(function(player, state)
 	if not spawnedPatients[player] then return end
 	for _, npc in pairs(spawnedPatients[player]) do

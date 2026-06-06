@@ -1,5 +1,8 @@
 -- ScenarioData (ModuleScript) — ReplicatedStorage
-local PatientPool = require(script.Parent:WaitForChild("PatientPool"))
+-- Patients are now generated at runtime by PatientGenerator.
+-- PatientPool is no longer used here.
+
+local PatientGenerator = require(script.Parent:WaitForChild("PatientGenerator"))
 
 local ScenarioData = {}
 
@@ -48,20 +51,21 @@ ScenarioData.Scenarios = {
 	},
 }
 
--- patients di-inject dari PatientPool saat runtime
-for _, scenario in ipairs(ScenarioData.Scenarios) do
-	scenario.patients = PatientPool.GetByScenario(scenario.id)
-end
-
+-- Patients are generated fresh each time GetScenario is called.
+-- This means every session has a different patient mix.
 function ScenarioData.GetScenario(scenarioId)
 	for _, scenario in ipairs(ScenarioData.Scenarios) do
-		if scenario.id == scenarioId then return scenario end
+		if scenario.id == scenarioId then
+			-- Generate fresh patients for this session
+			scenario.patients = PatientGenerator.GenerateForScenario(scenarioId, scenario.casualtyCount)
+			return scenario
+		end
 	end
 	return nil
 end
 
 function ScenarioData.GetDefault()
-	return ScenarioData.Scenarios[1]
+	return ScenarioData.GetScenario("food_poisoning")
 end
 
 return ScenarioData

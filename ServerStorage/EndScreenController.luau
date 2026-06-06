@@ -1,5 +1,5 @@
 -- EndScreenScontroller
--- StarterPlayerScripts
+-- StarterPlayerScripts (Not used(?))
 
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
