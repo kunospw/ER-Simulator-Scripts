@@ -28,6 +28,14 @@ cleanupMpSpawns.Name = "CleanupMPSpawns"
 local startMpRound = SS:WaitForChild("StartMPRound")
 local endMpRound = SS:WaitForChild("EndMPRound")
 
+-- IoT timer adjust BindableEvent
+local iotAdjustMP = SS:FindFirstChild("IoTTimerAdjustMP")
+if not iotAdjustMP then
+	iotAdjustMP = Instance.new("BindableEvent")
+	iotAdjustMP.Name = "IoTTimerAdjustMP"
+	iotAdjustMP.Parent = SS
+end
+
 function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 	local hospital = HospitalRegistry.AssignMulti(allPlayers)
 	if not hospital then return end
@@ -43,9 +51,9 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 
 			-- 1. Setup Round
 			for i, player in ipairs(activePlayers) do
-				if player and player.Parent then 
+				if player and player.Parent then
 					player:SetAttribute("InMultiplayer", true)
-					player:SetAttribute("AssignedHospitalId", hospital.id) 
+					player:SetAttribute("AssignedHospitalId", hospital.id)
 					player:SetAttribute("AssignedBedIndex", i)
 
 					startMpRound:Fire(player)
@@ -60,8 +68,25 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 				end
 			end
 
-			-- 2. Run Timer
-			task.wait(ROUND_TIME)
+			-- 2. Run Timer (real countdown so IoT can adjust it)
+			local timeLeft = ROUND_TIME
+			local adjustConn = iotAdjustMP.Event:Connect(function(delta)
+				timeLeft = math.clamp(timeLeft + delta, 0, 600)
+				print(string.format("[Multiplayer] IoT timer adjust: %+d → %ds remaining", delta, timeLeft))
+				-- Notify all clients of the new time
+				for _, player in ipairs(activePlayers) do
+					if player and player.Parent then
+						matchStartedRemote:FireClient(player, timeLeft)
+					end
+				end
+			end)
+
+			while timeLeft > 0 do
+				task.wait(1)
+				timeLeft -= 1
+			end
+
+			adjustConn:Disconnect()
 
 			-- 3. Evaluate Scores
 			local leaderboard = {}
@@ -69,7 +94,7 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 				local player = activePlayers[i]
 				if player and player.Parent then
 					player:SetAttribute("InMultiplayer", false)
-					cleanupMpSpawns:Fire(player) 
+					cleanupMpSpawns:Fire(player)
 
 					table.insert(leaderboard, {
 						playerObj = player,
@@ -77,7 +102,7 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 						score = player:GetAttribute("Score") or 0
 					})
 				else
-					table.remove(activePlayers, i) 
+					table.remove(activePlayers, i)
 				end
 			end
 
@@ -91,10 +116,9 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 				eliminatedIndex = #leaderboard
 				local eliminatedPlayer = leaderboard[eliminatedIndex].playerObj
 
-				-- [FIX]: Safely locate and remove the exact player from the active array
 				local indexToRemove = table.find(activePlayers, eliminatedPlayer)
 				if indexToRemove then
-					table.remove(activePlayers, indexToRemove) 
+					table.remove(activePlayers, indexToRemove)
 				end
 
 				eliminatedPlayer:SetAttribute("SkipMainMenu", true)
@@ -110,17 +134,14 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 			local isFinal = (#activePlayers <= 1)
 			if isFinal and activePlayers[1] then
 				local winner = activePlayers[1]
-
-				-- [FIX]: Give the winner the flag so their Main Menu stays closed during the respawn!
 				winner:SetAttribute("SkipMainMenu", true)
-
 				task.spawn(function()
 					if winner and winner.Parent then
 						winner:LoadCharacter()
 					end
 				end)
 			end
-			
+
 			-- 5. Trigger UI
 			local clientLeaderboard = {}
 			for i, entry in ipairs(leaderboard) do
@@ -133,7 +154,7 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 			end
 
 			for _, pData in ipairs(leaderboard) do
-				endMpRound:Fire(pData.playerObj) 
+				endMpRound:Fire(pData.playerObj)
 				matchEndedRemote:FireClient(pData.playerObj, clientLeaderboard, isFinal)
 			end
 
@@ -145,7 +166,6 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 				local roundReadyEvent = Instance.new("BindableEvent")
 
 				local conn = voteNextRemote.OnServerEvent:Connect(function(plr)
-					-- Because activePlayers is correctly managed now, this check will pass!
 					if table.find(activePlayers, plr) and not votes[plr] then
 						votes[plr] = true
 						voteCount += 1
