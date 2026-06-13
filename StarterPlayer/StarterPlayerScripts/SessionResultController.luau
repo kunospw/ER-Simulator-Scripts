@@ -244,9 +244,9 @@ sessionRemote.OnClientEvent:Connect(function(data)
 end)
 
 -- ── Multiplayer Match Ended (True Leaderboard Integration) ──────────────────
-local matchEndedRemote = RS:WaitForChild("MultiplayerMatchEnded")
-local matchStartedRemote = RS:WaitForChild("MultiplayerMatchStarted")
-local updateVotesRemote = RS:WaitForChild("UpdateMPVotes")
+local matchEndedRemote   = RS:WaitForChild("MultiplayerMatchEnded", 5) or Instance.new("RemoteEvent")
+local matchStartedRemote = RS:WaitForChild("MultiplayerMatchStarted", 5) or Instance.new("RemoteEvent")
+local updateVotesRemote = RS:WaitForChild("UpdateMPVotes", 5) or Instance.new("RemoteEvent")
 
 -- [FIX]: Automatically hide the End Screen when the next round begins
 matchStartedRemote.OnClientEvent:Connect(function()

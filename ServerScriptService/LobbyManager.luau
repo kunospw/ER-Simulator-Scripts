@@ -84,6 +84,23 @@ end)
 
 Players.PlayerRemoving:Connect(removePlayerFromLobbies)
 
+local requestLobbiesRemote = getOrCreateRemote("RequestLobbies")
+
+requestLobbiesRemote.OnServerEvent:Connect(function(player)
+	broadcastLobbies()
+end)
+
+local setLobbyScenarioRemote = getOrCreateRemote("SetLobbyScenario")
+
+setLobbyScenarioRemote.OnServerEvent:Connect(function(player, scenarioId)
+	-- Store di lobby data, Denzel bisa pakai ini saat StartMatch
+	local lobby = lobbies[player.UserId]
+	if lobby and lobby.Host == player then
+		lobby.selectedScenarioId = scenarioId
+		print("[LobbyManager] Host set scenario:", scenarioId)
+	end
+end)
+
 local startMatchRemote = getOrCreateRemote("StartMatch")
 local SS = game:GetService("ServerStorage")
 

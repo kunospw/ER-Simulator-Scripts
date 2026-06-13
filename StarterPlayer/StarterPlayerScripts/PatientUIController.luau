@@ -541,7 +541,7 @@ player:GetAttributeChangedSignal("PatientsRemaining"):Connect(function()
 end)
 
 -- ── Force Close UI on Round End ──────────────────────────────────────────────
-local matchEndedRemote = RS:WaitForChild("MultiplayerMatchEnded")
+local matchEndedRemote = RS:WaitForChild("MultiplayerMatchEnded", 5) or Instance.new("RemoteEvent")
 matchEndedRemote.OnClientEvent:Connect(function()
 	local gui = getGui()
 	if not gui then return end
@@ -582,7 +582,7 @@ iotTimerRemote.OnClientEvent:Connect(function(delta)
 end)
 
 -- ── IoT Notification ──────────────────────────────────────────────────────────
-local iotNotifRemote = RS:WaitForChild("IoTNotification")
+local iotNotifRemote = RS:WaitForChild("IoTNotification", 5) or Instance.new("RemoteEvent")
 
 local notifColors = {
 	RED    = Color3.fromRGB(239, 68, 68),

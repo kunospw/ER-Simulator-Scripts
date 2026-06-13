@@ -38,12 +38,28 @@ local TriggerCinematic = RS:WaitForChild("TriggerCinematic")
 local ScenarioData     = require(RS:WaitForChild("ScenarioData"))
 
 -- Lobby Remotes
+local RequestLobbies = RS:WaitForChild("RequestLobbies")
 local CreateLobby   = RS:WaitForChild("CreateLobby")
 local JoinLobby     = RS:WaitForChild("JoinLobby")
 local LeaveLobby    = RS:WaitForChild("LeaveLobby")
 local UpdateLobbies = RS:WaitForChild("UpdateLobbies")
 
 local cachedLobbies = {}
+local function getAvatarThumbnail(userId, imageLabel, size)
+	size = size or Enum.ThumbnailSize.Size48x48
+	task.spawn(function()
+		local ok, img = pcall(function()
+			return game:GetService("Players"):GetUserThumbnailAsync(
+				userId,
+				Enum.ThumbnailType.HeadShot,
+				size
+			)
+		end)
+		if ok and imageLabel and imageLabel.Parent then
+			imageLabel.Image = img
+		end
+	end)
+end
 local currentView = "scenario" -- "scenario" | "multiplayer"
 
 -- ── Menu Camera ───────────────────────────────────────────────────────────────
@@ -354,7 +370,7 @@ local function showMultiplayerView()
 	if headerLabel then headerLabel.Text = "Multiplayer Lobbies" end
 
 	clearList()
-	cardLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	cardLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 
 	-- Check if player is currently in a lobby
 	local myLobby = nil
@@ -368,52 +384,234 @@ local function showMultiplayerView()
 	end
 
 	if myLobby then
-		-- Render: "In Lobby" View
-		local title = Instance.new("TextLabel")
-		title.Text = myLobby.HostName .. "'s Lobby (" .. myLobby.PlayerCount .. "/" .. myLobby.MaxPlayers .. ")"
-		title.TextSize = 16
-		title.Font = Enum.Font.GothamBold
-		title.TextColor3 = Color3.new(1, 1, 1)
-		title.BackgroundTransparency = 1
-		title.Size = UDim2.new(1, -16, 0, 30)
-		title.Parent = ScenarioList
+		-- ── IN-LOBBY VIEW ──────────────────────────────────────────────────────
 
+		-- Header card
+		local headerCard = Instance.new("Frame")
+		headerCard.Size = UDim2.new(1, -16, 0, 50)
+		headerCard.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+		headerCard.BorderSizePixel = 0
+		headerCard.Parent = ScenarioList
+		Instance.new("UICorner", headerCard).CornerRadius = UDim.new(0, 8)
+
+		local lobbyTitle = Instance.new("TextLabel")
+		lobbyTitle.Text = "👑 " .. myLobby.HostName .. "'s Lobby"
+		lobbyTitle.TextSize = 14
+		lobbyTitle.Font = Enum.Font.GothamBold
+		lobbyTitle.TextColor3 = Color3.new(1, 1, 1)
+		lobbyTitle.BackgroundTransparency = 1
+		lobbyTitle.Size = UDim2.new(0.7, 0, 1, 0)
+		lobbyTitle.Position = UDim2.new(0, 12, 0, 0)
+		lobbyTitle.TextXAlignment = Enum.TextXAlignment.Left
+		lobbyTitle.Parent = headerCard
+
+		local countLabel = Instance.new("TextLabel")
+		countLabel.Text = myLobby.PlayerCount .. "/" .. myLobby.MaxPlayers .. " players"
+		countLabel.TextSize = 11
+		countLabel.Font = Enum.Font.Gotham
+		countLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
+		countLabel.BackgroundTransparency = 1
+		countLabel.Size = UDim2.new(0.3, -12, 1, 0)
+		countLabel.Position = UDim2.new(0.7, 0, 0, 0)
+		countLabel.TextXAlignment = Enum.TextXAlignment.Right
+		countLabel.Parent = headerCard
+
+		-- Player cards
 		for _, pName in ipairs(myLobby.PlayerNames) do
-			local pFrame = Instance.new("TextLabel")
-			pFrame.Text = "  " .. pName .. (pName == myLobby.HostName and " (Host)" or "")
-			pFrame.TextSize = 13
-			pFrame.Font = Enum.Font.Gotham
-			pFrame.TextColor3 = Color3.fromRGB(200, 200, 200)
-			pFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-			pFrame.Size = UDim2.new(1, -16, 0, 35)
-			pFrame.TextXAlignment = Enum.TextXAlignment.Left
-			pFrame.Parent = ScenarioList
-			Instance.new("UICorner", pFrame).CornerRadius = UDim.new(0, 6)
+			local isHost = (pName == myLobby.HostName)
+			local isMe = (pName == player.Name)
+
+			local pCard = Instance.new("Frame")
+			pCard.Size = UDim2.new(1, -16, 0, 52)
+			pCard.BackgroundColor3 = isMe
+				and Color3.fromRGB(40, 45, 55)
+				or  Color3.fromRGB(30, 30, 30)
+			pCard.BorderSizePixel = 0
+			pCard.Parent = ScenarioList
+			Instance.new("UICorner", pCard).CornerRadius = UDim.new(0, 8)
+
+			-- Avatar image
+			local avatarFrame = Instance.new("Frame")
+			avatarFrame.Size = UDim2.new(0, 36, 0, 36)
+			avatarFrame.Position = UDim2.new(0, 8, 0.5, -18)
+			avatarFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+			avatarFrame.BorderSizePixel = 0
+			avatarFrame.Parent = pCard
+			Instance.new("UICorner", avatarFrame).CornerRadius = UDim.new(1, 0)
+
+			local avatarImg = Instance.new("ImageLabel")
+			avatarImg.Size = UDim2.fromScale(1, 1)
+			avatarImg.BackgroundTransparency = 1
+			avatarImg.Image = "rbxassetid://0" -- placeholder
+			avatarImg.Parent = avatarFrame
+			Instance.new("UICorner", avatarImg).CornerRadius = UDim.new(1, 0)
+
+			-- Load avatar async
+			task.spawn(function()
+				local ok, uid = pcall(function()
+					return game:GetService("Players"):GetUserIdFromNameAsync(pName)
+				end)
+				if ok and uid then
+					getAvatarThumbnail(uid, avatarImg)
+				end
+			end)
+
+			-- Name + badge row
+			local nameLabel = Instance.new("TextLabel")
+			nameLabel.Text = pName .. (isMe and " (You)" or "")
+			nameLabel.TextSize = 13
+			nameLabel.Font = Enum.Font.GothamBold
+			nameLabel.TextColor3 = Color3.new(1, 1, 1)
+			nameLabel.BackgroundTransparency = 1
+			nameLabel.Size = UDim2.new(1, -100, 0, 20)
+			nameLabel.Position = UDim2.new(0, 52, 0, 8)
+			nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+			nameLabel.Parent = pCard
+
+			if isHost then
+				local crownBadge = Instance.new("TextLabel")
+				crownBadge.Text = "👑 Host"
+				crownBadge.TextSize = 10
+				crownBadge.Font = Enum.Font.GothamBold
+				crownBadge.TextColor3 = Color3.fromRGB(234, 179, 8)
+				crownBadge.BackgroundColor3 = Color3.fromRGB(50, 42, 20)
+				crownBadge.Size = UDim2.new(0, 54, 0, 18)
+				crownBadge.Position = UDim2.new(0, 52, 0, 28)
+				crownBadge.BorderSizePixel = 0
+				crownBadge.Parent = pCard
+				Instance.new("UICorner", crownBadge).CornerRadius = UDim.new(1, 0)
+				local bp = Instance.new("UIPadding", crownBadge)
+				bp.PaddingLeft = UDim.new(0, 6)
+				bp.PaddingRight = UDim.new(0, 6)
+			else
+				local readyLabel = Instance.new("TextLabel")
+				readyLabel.Text = "Waiting..."
+				readyLabel.TextSize = 10
+				readyLabel.Font = Enum.Font.Gotham
+				readyLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
+				readyLabel.BackgroundTransparency = 1
+				readyLabel.Size = UDim2.new(1, -60, 0, 18)
+				readyLabel.Position = UDim2.new(0, 52, 0, 28)
+				readyLabel.TextXAlignment = Enum.TextXAlignment.Left
+				readyLabel.Parent = pCard
+			end
 		end
 
+		-- Scenario picker (host only) — compact list
+		if myLobby.HostName == player.Name then
+			local pickerLabel = Instance.new("TextLabel")
+			pickerLabel.Text = "Choose Scenario"
+			pickerLabel.TextSize = 11
+			pickerLabel.Font = Enum.Font.GothamBold
+			pickerLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
+			pickerLabel.BackgroundTransparency = 1
+			pickerLabel.Size = UDim2.new(1, -16, 0, 24)
+			pickerLabel.TextXAlignment = Enum.TextXAlignment.Left
+			pickerLabel.Parent = ScenarioList
+
+			local ScenarioData = require(RS:WaitForChild("ScenarioData"))
+			for _, scenario in ipairs(ScenarioData.Scenarios) do
+				local sBtn = Instance.new("TextButton")
+				sBtn.Text = scenario.title .. "  ·  " .. scenario.casualtyCount .. " korban"
+				sBtn.TextSize = 12
+				sBtn.Font = Enum.Font.Gotham
+				sBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+				sBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+				sBtn.Size = UDim2.new(1, -16, 0, 36)
+				sBtn.BorderSizePixel = 0
+				sBtn.TextXAlignment = Enum.TextXAlignment.Left
+				sBtn.Parent = ScenarioList
+				Instance.new("UICorner", sBtn).CornerRadius = UDim.new(0, 6)
+
+				local sp = Instance.new("UIPadding", sBtn)
+				sp.PaddingLeft = UDim.new(0, 10)
+
+				local diffColors = {
+					easy = Color3.fromRGB(34, 197, 94),
+					medium = Color3.fromRGB(234, 179, 8),
+					hard = Color3.fromRGB(239, 68, 68),
+				}
+				local dot = Instance.new("Frame")
+				dot.Size = UDim2.new(0, 6, 0, 6)
+				dot.Position = UDim2.new(1, -16, 0.5, -3)
+				dot.BackgroundColor3 = diffColors[scenario.difficulty] or diffColors.medium
+				dot.BorderSizePixel = 0
+				dot.Parent = sBtn
+				Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+
+				sBtn.MouseButton1Click:Connect(function()
+					-- Highlight selected
+					for _, child in ipairs(ScenarioList:GetChildren()) do
+						if child:IsA("TextButton") and child ~= sBtn then
+							child.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+							child.TextColor3 = Color3.fromRGB(200, 200, 200)
+						end
+					end
+					sBtn.BackgroundColor3 = Color3.fromRGB(229, 57, 53)
+					sBtn.TextColor3 = Color3.new(1, 1, 1)
+					selectedScenarioId = scenario.id
+					-- Notify server (Denzel wires this to set CurrentScenarioId)
+					RS:WaitForChild("SetLobbyScenario"):FireServer(scenario.id)
+				end)
+			end
+		end
+
+		-- Spacer
+		local spacer = Instance.new("Frame")
+		spacer.Size = UDim2.new(1, 0, 0, 4)
+		spacer.BackgroundTransparency = 1
+		spacer.Parent = ScenarioList
+
+		-- Start Match (host only)
 		if myLobby.HostName == player.Name then
 			local startBtn = Instance.new("TextButton")
-			startBtn.Text = "Start Match"
+			startBtn.Text = "▶  Start Match"
 			startBtn.TextSize = 13
 			startBtn.Font = Enum.Font.GothamBold
 			startBtn.TextColor3 = Color3.new(1, 1, 1)
 			startBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
 			startBtn.Size = UDim2.new(1, -16, 0, 40)
+			startBtn.BorderSizePixel = 0
 			startBtn.Parent = ScenarioList
 			Instance.new("UICorner", startBtn).CornerRadius = UDim.new(0, 8)
 			startBtn.MouseButton1Click:Connect(function()
-				--print("Start Match clicked - Hook to Matchmaker later")
-				RS:WaitForChild("StartMatch"):FireServer() 
+				if myLobby.PlayerCount < 2 then
+					-- Toast: need more players
+					local toast = Instance.new("ScreenGui")
+					toast.ResetOnSpawn = false
+					toast.Parent = player.PlayerGui
+					local f = Instance.new("Frame")
+					f.Size = UDim2.new(0, 260, 0, 40)
+					f.Position = UDim2.new(0.5, -130, 0, 12)
+					f.BackgroundColor3 = Color3.fromRGB(239, 68, 68)
+					f.BorderSizePixel = 0
+					f.Parent = toast
+					Instance.new("UICorner", f).CornerRadius = UDim.new(0, 8)
+					local l = Instance.new("TextLabel")
+					l.Size = UDim2.new(1, -16, 1, 0)
+					l.Position = UDim2.new(0, 8, 0, 0)
+					l.BackgroundTransparency = 1
+					l.TextColor3 = Color3.new(1,1,1)
+					l.Font = Enum.Font.GothamBold
+					l.TextSize = 13
+					l.Text = "Need at least 2 players to start!"
+					l.Parent = f
+					task.delay(2.5, function() toast:Destroy() end)
+					return
+				end
+				RS:WaitForChild("StartMatch"):FireServer()
 			end)
 		end
 
+		-- Leave button
 		local leaveBtn = Instance.new("TextButton")
 		leaveBtn.Text = "Leave Lobby"
 		leaveBtn.TextSize = 13
 		leaveBtn.Font = Enum.Font.GothamBold
 		leaveBtn.TextColor3 = Color3.new(1, 1, 1)
-		leaveBtn.BackgroundColor3 = Color3.fromRGB(229, 57, 53)
-		leaveBtn.Size = UDim2.new(1, -16, 0, 40)
+		leaveBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+		leaveBtn.Size = UDim2.new(1, -16, 0, 36)
+		leaveBtn.BorderSizePixel = 0
 		leaveBtn.Parent = ScenarioList
 		Instance.new("UICorner", leaveBtn).CornerRadius = UDim.new(0, 8)
 		leaveBtn.MouseButton1Click:Connect(function()
@@ -421,15 +619,16 @@ local function showMultiplayerView()
 		end)
 
 	else
-		-- Render: Lobby List View
+		-- ── LOBBY LIST VIEW ────────────────────────────────────────────────────
+
 		local createBtn = Instance.new("TextButton")
-		createBtn.Name = "CreateLobbyButton"
 		createBtn.Text = "+ Create Lobby"
 		createBtn.TextSize = 13
 		createBtn.Font = Enum.Font.GothamBold
 		createBtn.TextColor3 = Color3.new(1, 1, 1)
 		createBtn.BackgroundColor3 = Color3.fromRGB(229, 57, 53)
 		createBtn.Size = UDim2.new(1, -16, 0, 40)
+		createBtn.BorderSizePixel = 0
 		createBtn.Parent = ScenarioList
 		Instance.new("UICorner", createBtn).CornerRadius = UDim.new(0, 8)
 		createBtn.MouseButton1Click:Connect(function()
@@ -439,39 +638,87 @@ local function showMultiplayerView()
 		local hasLobbies = false
 		for hostId, lobbyData in pairs(cachedLobbies) do
 			hasLobbies = true
-			local card = Instance.new("TextButton")
-			card.Text = "  " .. lobbyData.HostName .. "'s Lobby  |  " .. lobbyData.PlayerCount .. "/" .. lobbyData.MaxPlayers
-			card.TextSize = 13
-			card.Font = Enum.Font.GothamBold
-			card.TextColor3 = Color3.new(1, 1, 1)
-			card.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-			card.Size = UDim2.new(1, -16, 0, 50)
-			card.TextXAlignment = Enum.TextXAlignment.Left
+
+			local card = Instance.new("Frame")
+			card.Size = UDim2.new(1, -16, 0, 60)
+			card.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+			card.BorderSizePixel = 0
 			card.Parent = ScenarioList
 			Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
 
-			local joinText = Instance.new("TextLabel")
-			joinText.Text = "Click to Join"
-			joinText.TextSize = 11
-			joinText.Font = Enum.Font.Gotham
-			joinText.TextColor3 = Color3.fromRGB(150, 150, 150)
-			joinText.BackgroundTransparency = 1
-			joinText.Size = UDim2.new(0, 100, 1, 0)
-			joinText.Position = UDim2.new(1, -110, 0, 0)
-			joinText.TextXAlignment = Enum.TextXAlignment.Right
-			joinText.Parent = card
+			-- Host avatar
+			local avatarFrame = Instance.new("Frame")
+			avatarFrame.Size = UDim2.new(0, 38, 0, 38)
+			avatarFrame.Position = UDim2.new(0, 10, 0.5, -19)
+			avatarFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+			avatarFrame.BorderSizePixel = 0
+			avatarFrame.Parent = card
+			Instance.new("UICorner", avatarFrame).CornerRadius = UDim.new(1, 0)
 
-			card.MouseButton1Click:Connect(function()
+			local avatarImg = Instance.new("ImageLabel")
+			avatarImg.Size = UDim2.fromScale(1, 1)
+			avatarImg.BackgroundTransparency = 1
+			avatarImg.Image = "rbxassetid://0"
+			avatarImg.Parent = avatarFrame
+			Instance.new("UICorner", avatarImg).CornerRadius = UDim.new(1, 0)
+
+			-- Load avatar
+			task.spawn(function()
+				local ok, uid = pcall(function()
+					return game:GetService("Players"):GetUserIdFromNameAsync(lobbyData.HostName)
+				end)
+				if ok and uid then
+					getAvatarThumbnail(uid, avatarImg)
+				end
+			end)
+
+			-- Host name
+			local hostLabel = Instance.new("TextLabel")
+			hostLabel.Text = "👑 " .. lobbyData.HostName .. "'s Lobby"
+			hostLabel.TextSize = 13
+			hostLabel.Font = Enum.Font.GothamBold
+			hostLabel.TextColor3 = Color3.new(1, 1, 1)
+			hostLabel.BackgroundTransparency = 1
+			hostLabel.Size = UDim2.new(1, -120, 0, 20)
+			hostLabel.Position = UDim2.new(0, 56, 0, 10)
+			hostLabel.TextXAlignment = Enum.TextXAlignment.Left
+			hostLabel.Parent = card
+
+			-- Player count
+			local countLabel = Instance.new("TextLabel")
+			countLabel.Text = lobbyData.PlayerCount .. "/" .. lobbyData.MaxPlayers .. " players"
+			countLabel.TextSize = 11
+			countLabel.Font = Enum.Font.Gotham
+			countLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
+			countLabel.BackgroundTransparency = 1
+			countLabel.Size = UDim2.new(1, -120, 0, 16)
+			countLabel.Position = UDim2.new(0, 56, 0, 32)
+			countLabel.TextXAlignment = Enum.TextXAlignment.Left
+			countLabel.Parent = card
+
+			-- Join button
+			local joinBtn = Instance.new("TextButton")
+			joinBtn.Text = "Join"
+			joinBtn.TextSize = 12
+			joinBtn.Font = Enum.Font.GothamBold
+			joinBtn.TextColor3 = Color3.new(1, 1, 1)
+			joinBtn.BackgroundColor3 = Color3.fromRGB(229, 57, 53)
+			joinBtn.Size = UDim2.new(0, 52, 0, 28)
+			joinBtn.Position = UDim2.new(1, -62, 0.5, -14)
+			joinBtn.BorderSizePixel = 0
+			joinBtn.Parent = card
+			Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 6)
+			joinBtn.MouseButton1Click:Connect(function()
 				JoinLobby:FireServer(hostId)
 			end)
 		end
 
 		if not hasLobbies then
 			local noLobbyLabel = Instance.new("TextLabel")
-			noLobbyLabel.Text = "No multiplayer lobbies yet."
-			noLobbyLabel.TextSize = 13
+			noLobbyLabel.Text = "No lobbies yet. Create one!"
+			noLobbyLabel.TextSize = 12
 			noLobbyLabel.Font = Enum.Font.Gotham
-			noLobbyLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
+			noLobbyLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
 			noLobbyLabel.BackgroundTransparency = 1
 			noLobbyLabel.Size = UDim2.new(1, -16, 0, 40)
 			noLobbyLabel.TextXAlignment = Enum.TextXAlignment.Center
@@ -486,6 +733,10 @@ UpdateLobbies.OnClientEvent:Connect(function(lobbiesDict)
 		showMultiplayerView()
 	end
 end)
+-- ── Entry animation ───────────────────────────────────────────────────────────
+MainMenuFrame.BackgroundTransparency = 1
+RequestLobbies:FireServer()
+task.wait(0.3)
 
 local function showScenarioView()
 	local headerLabel = Header:FindFirstChildWhichIsA("TextLabel")
@@ -525,8 +776,8 @@ TweenService:Create(MainMenuFrame,
 ):Play()
 
 -- ── Multiplayer Match Start Intercept & Timer HUD ─────────────────────────────
-local MatchStarted = RS:WaitForChild("MultiplayerMatchStarted")
-local MatchEnded   = RS:WaitForChild("MultiplayerMatchEnded") -- [NEW]
+local MatchStarted = RS:WaitForChild("MultiplayerMatchStarted", 5) or Instance.new("RemoteEvent")
+local MatchEnded   = RS:WaitForChild("MultiplayerMatchEnded", 5) or Instance.new("RemoteEvent")
 
 local timerGui = Instance.new("ScreenGui")
 timerGui.Name = "MultiplayerTimerHUD"
@@ -592,7 +843,7 @@ MatchStarted.OnClientEvent:Connect(function(duration)
 	end
 end)
 
-local iotGlobalTimerRemote = RS:WaitForChild("IoTGlobalTimer")
+local iotGlobalTimerRemote = RS:WaitForChild("IoTGlobalTimer", 5) or Instance.new("RemoteEvent")
 iotGlobalTimerRemote.OnClientEvent:Connect(function(delta)
 	player:SetAttribute("MPTimerDelta", (player:GetAttribute("MPTimerDelta") or 0) + delta)
 end)

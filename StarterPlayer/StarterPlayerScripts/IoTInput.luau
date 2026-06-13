@@ -1,4 +1,4 @@
--- IoTInput.lua (StarterPlayerScripts)
+-- IoTInput.lua (StarterPlayerScripts) (disabled, now user IoTController)
 local UIS = game:GetService("UserInputService")
 local RS = game:GetService("ReplicatedStorage")
 
