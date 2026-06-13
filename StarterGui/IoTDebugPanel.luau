@@ -1,4 +1,4 @@
--- IoTDebugPanel (LocalScript) — StarterGui (No longer used(?))
+-- IoTDebugPanel (LocalScript) — StarterGui
 return
 local RS = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
