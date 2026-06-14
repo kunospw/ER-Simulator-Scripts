@@ -48,6 +48,13 @@ local function getGui()
 	return player.PlayerGui:WaitForChild("GameplayScreenGui")
 end
 
+local function setStopButtonVisible(visible)
+	if not player:GetAttribute("InEndless") then return end
+	local gui = getGui()
+	local stopButton = gui and gui:FindFirstChild("StopButton")
+	if stopButton then stopButton.Visible = visible end
+end
+
 -- ── Toast (training tip) ──────────────────────────────────────────────────────
 local toastTween = nil
 local toastVisible = false
@@ -236,6 +243,8 @@ end
 showUIRemote.OnClientEvent:Connect(function(patient)
 	local gui = getGui()
 	if not gui then return end
+	
+	setStopButtonVisible(false)
 
 	local head = patient:FindFirstChild("Head")
 
@@ -449,6 +458,7 @@ showUIRemote.OnClientEvent:Connect(function(patient)
 				if triageFrame then triageFrame.Visible = false end
 				if timerFrame  then timerFrame.Visible  = false end
 				hideToast()
+				setStopButtonVisible(true)
 
 				-- DO NOT hide scoreFrame or counterFrame here.
 
@@ -487,6 +497,7 @@ triageResultRemote.OnClientEvent:Connect(function(feedback)
 	if triageFrame then triageFrame.Visible = false end
 	if timerFrame  then timerFrame.Visible  = false end
 	hideToast()
+	setStopButtonVisible(true)
 
 	-- Reset camera
 	if _G.ResetPatientCamera then _G.ResetPatientCamera() end
@@ -657,20 +668,42 @@ end)
 -- ── Endless Stop Button ───────────────────────────────────────────────────────
 local endlessEndRemote = RS:WaitForChild("EndlessEnd", 5) or Instance.new("RemoteEvent")
 
-task.spawn(function()
+local stopClickConn = nil
+
+local function wireStopButton()
 	local gui = player.PlayerGui:WaitForChild("GameplayScreenGui")
 	local stopButton = gui:WaitForChild("StopButton")
+
+	-- Drop the old (stale/destroyed) connection before making a new one
+	if stopClickConn then
+		stopClickConn:Disconnect()
+		stopClickConn = nil
+	end
+
 	stopButton.Visible = false
 
-	player:GetAttributeChangedSignal("InEndless"):Connect(function()
-		if not player:GetAttribute("InEndless") then
-			stopButton.Visible = false
-		end
-	end)
-
-	stopButton.MouseButton1Click:Connect(function()
+	stopClickConn = stopButton.MouseButton1Click:Connect(function()
 		if not player:GetAttribute("InEndless") then return end
 		stopButton.Visible = false
 		endlessEndRemote:FireServer()
 	end)
+end
+
+-- Wire on first load
+task.spawn(wireStopButton)
+
+-- Re-wire every time GameplayScreenGui is rebuilt on respawn (ResetOnSpawn)
+player.PlayerGui.ChildAdded:Connect(function(child)
+	if child.Name == "GameplayScreenGui" then
+		task.spawn(wireStopButton)
+	end
+end)
+
+-- Hide when leaving endless
+player:GetAttributeChangedSignal("InEndless"):Connect(function()
+	if not player:GetAttribute("InEndless") then
+		local gui = player.PlayerGui:FindFirstChild("GameplayScreenGui")
+		local stopButton = gui and gui:FindFirstChild("StopButton")
+		if stopButton then stopButton.Visible = false end
+	end
 end)
