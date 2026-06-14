@@ -252,7 +252,13 @@ showUIRemote.OnClientEvent:Connect(function(patient)
 	if counterFrame then
 		counterFrame.Visible = true
 		local c = counterFrame:FindFirstChild("PatientCounterText")
-		if c then c.Text = "Pasien: " .. (player:GetAttribute("PatientsRemaining") or "?") end
+		if c then
+			if player:GetAttribute("InEndless") then
+				c.Text = "Triaged: " .. (player:GetAttribute("CorrectCount") or 0)
+			else
+				c.Text = "Pasien: " .. (player:GetAttribute("PatientsRemaining") or "?")
+			end
+		end
 	end
 	if timerFrame then timerFrame.Visible = true end
 
@@ -627,5 +633,44 @@ iotNotifRemote.OnClientEvent:Connect(function(message, colorKey)
 		):Play()
 		task.wait(0.25)
 		notif:Destroy()
+	end)
+end)
+
+player:GetAttributeChangedSignal("PatientsRemaining"):Connect(function()
+	local gui = getGui()
+	if not gui then return end
+	local counterFrame = gui:FindFirstChild("PatientCounterFrame")
+	if counterFrame then
+		local counterText = counterFrame:FindFirstChild("PatientCounterText")
+		if counterText then
+			if player:GetAttribute("InEndless") then
+				local correct = player:GetAttribute("CorrectCount") or 0
+				counterText.Text = "Triaged: " .. correct
+			else
+				local remaining = player:GetAttribute("PatientsRemaining") or 0
+				counterText.Text = "Pasien: " .. remaining
+			end
+		end
+	end
+end)
+
+-- ── Endless Stop Button ───────────────────────────────────────────────────────
+local endlessEndRemote = RS:WaitForChild("EndlessEnd", 5) or Instance.new("RemoteEvent")
+
+task.spawn(function()
+	local gui = player.PlayerGui:WaitForChild("GameplayScreenGui")
+	local stopButton = gui:WaitForChild("StopButton")
+	stopButton.Visible = false
+
+	player:GetAttributeChangedSignal("InEndless"):Connect(function()
+		if not player:GetAttribute("InEndless") then
+			stopButton.Visible = false
+		end
+	end)
+
+	stopButton.MouseButton1Click:Connect(function()
+		if not player:GetAttribute("InEndless") then return end
+		stopButton.Visible = false
+		endlessEndRemote:FireServer()
 	end)
 end)

@@ -154,9 +154,17 @@ local function onBriefingFinished()
 	if BriefingDoneEvent then
 		BriefingDoneEvent:FireServer(currentScenario.id)
 	end
+
+	-- Tambah ini ↓
+	if Players.LocalPlayer:GetAttribute("InEndless") then
+		local gui = Players.LocalPlayer.PlayerGui:FindFirstChild("GameplayScreenGui")
+		local stopButton = gui and gui:FindFirstChild("StopButton")
+		if stopButton then stopButton.Visible = true end
+	end
+	-- Tambah ini ↑
+
 	print("[ScenarioScreen] Briefing done — scenario:", currentScenario.id)
 end
-
 ContinueButton.MouseButton1Click:Connect(function()
 	if isTyping then
 		skipTyping = true

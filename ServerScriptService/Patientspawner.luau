@@ -324,6 +324,19 @@ local function spawnOnePatient(player, patientData, slotIndex, beds, scenarioMod
 	spawnedPatients[player][slotIndex] = npc
 end
 
+-- ── Expose spawnOnePatient untuk EndlessMode ──────────────────────────────────
+local spawnOneBF = Instance.new("BindableFunction")
+spawnOneBF.Name   = "SpawnOnePatient"
+spawnOneBF.Parent = SS
+
+spawnOneBF.OnInvoke = function(player, patientData, slotIndex, beds, scenarioMode)
+	if not spawnedPatients[player] then
+		spawnedPatients[player]   = {}
+		promptConnections[player] = {}
+	end
+	spawnOnePatient(player, patientData, slotIndex, beds, scenarioMode)
+end
+
 -- ── Scenario spawn ────────────────────────────────────────────────────────────
 local function spawnPatientsForScenario(player, scenarioId)
 	local scenario = ScenarioData.GetScenario(scenarioId)
@@ -511,6 +524,7 @@ end)
 
 -- ── patientCleared ────────────────────────────────────────────────────────────
 patientCleared.Event:Connect(function(player, slotIndex)
+	if player:GetAttribute("InEndless") then return end
 	if player:GetAttribute("InMultiplayer") then
 		task.wait(1.2)
 		local hId = player:GetAttribute("AssignedHospitalId")
@@ -553,6 +567,22 @@ toggleRemote.OnServerEvent:Connect(function(player, state)
 end)
 
 spawnRemote.OnServerEvent:Connect(function(player, scenarioId)
+	if scenarioId == "endless" then
+		local hospital = HospitalRegistry.GetByPlayer(player)
+		if not hospital then return end
+		spawnedPatients[player]   = {}
+		promptConnections[player] = {}
+		local character = player.Character
+		if character then
+			local hrp = character:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				hrp.CFrame = CFrame.new(hospital.spawnPosition + Vector3.new(0, 3, 0))
+			end
+		end
+		local EndlessMode = require(game:GetService("ServerScriptService"):WaitForChild("EndlessMode"))
+		EndlessMode.Start(player)
+		return
+	end
 	spawnPatientsForScenario(player, scenarioId)
 end)
 

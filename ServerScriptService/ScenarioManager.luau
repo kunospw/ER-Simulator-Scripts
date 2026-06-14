@@ -188,6 +188,11 @@ triggerRemote.OnServerEvent:Connect(function(player, scenarioId)
 		return
 	end
 	player:SetAttribute("CurrentScenarioId", scenarioId)
+	local isEndless = (scenarioId == "endless")
+	player:SetAttribute("InEndless", isEndless)
+	if isEndless then
+		player:SetAttribute("CurrentScenarioMode", "Endless Mode")
+	end
 	local ScenarioData = require(RS:WaitForChild("ScenarioData"))
 	local scenario = ScenarioData.GetScenario(scenarioId)
 	if scenario then

@@ -224,22 +224,36 @@ sessionRemote.OnClientEvent:Connect(function(data)
 	end
 
 	if tryAgainBtn then
-		local conn
-		conn = tryAgainBtn.MouseButton1Click:Connect(function()
-			conn:Disconnect()
-			gui.Enabled = false
-			local scenarioId = player.PlayerGui:FindFirstChild("ScenarioScreen")
-				and player.PlayerGui.ScenarioScreen:GetAttribute("ScenarioId")
-				or "food_poisoning"
+		local isEndless = player:GetAttribute("InEndless") == false 
+			and player:GetAttribute("CurrentScenarioId") == "endless"
 
-			player:SetAttribute("SkipMainMenu", true)
-
-
-			returnRemote:FireServer()
-			player.CharacterAdded:Wait()
-			task.wait(0.5)
-			triggerRemote:FireServer(scenarioId)
-		end)
+		if isEndless then
+			tryAgainBtn.Text = "Play Again"
+			local conn
+			conn = tryAgainBtn.MouseButton1Click:Connect(function()
+				conn:Disconnect()
+				gui.Enabled = false
+				player:SetAttribute("SkipMainMenu", true)
+				returnRemote:FireServer()
+				player.CharacterAdded:Wait()
+				task.wait(0.5)
+				triggerRemote:FireServer("endless")
+			end)
+		else
+			local conn
+			conn = tryAgainBtn.MouseButton1Click:Connect(function()
+				conn:Disconnect()
+				gui.Enabled = false
+				local scenarioId = player.PlayerGui:FindFirstChild("ScenarioScreen")
+					and player.PlayerGui.ScenarioScreen:GetAttribute("ScenarioId")
+					or "food_poisoning"
+				player:SetAttribute("SkipMainMenu", true)
+				returnRemote:FireServer()
+				player.CharacterAdded:Wait()
+				task.wait(0.5)
+				triggerRemote:FireServer(scenarioId)
+			end)
+		end
 	end
 end)
 

@@ -751,6 +751,15 @@ PlayButton.MouseButton1Click:Connect(function()
 	slideToScenarios()
 end)
 
+local EndlessButton = ContentPanel:WaitForChild("EndlessButton")
+
+EndlessButton.MouseButton1Click:Connect(function()
+	MainMenuGui.Enabled = false
+	enableControls()
+	stopMenuCamera()
+	TriggerCinematic:FireServer("endless")
+end)
+
 MultiplayerButton.MouseButton1Click:Connect(function()
 	currentView = "multiplayer"
 	showMultiplayerView()

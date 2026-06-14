@@ -164,7 +164,9 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 
 	if isCorrect then
 		player:SetAttribute("CorrectCount", (player:GetAttribute("CorrectCount") or 0) + 1)
-		player:SetAttribute("PatientsRemaining", (player:GetAttribute("PatientsRemaining") or 1) - 1)
+		if not player:GetAttribute("InEndless") then
+			player:SetAttribute("PatientsRemaining", (player:GetAttribute("PatientsRemaining") or 1) - 1)
+		end	
 	else
 		player:SetAttribute("WrongCount", (player:GetAttribute("WrongCount") or 0) + 1)
 		table.insert(mistakes[player], {
@@ -218,7 +220,7 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 	print(string.format("[TriageManager] %d/%d triaged", totalTriaged, totalPatients))
 
 	-- [NEW]: Only trigger the single-player end screen if they aren't in multiplayer
-	if not player:GetAttribute("InMultiplayer") then
+	if not player:GetAttribute("InMultiplayer") and not player:GetAttribute("InEndless") then
 		if totalPatients > 0 and totalTriaged >= totalPatients then
 			print("[TriageManager] SCENARIO COMPLETE!")
 			task.wait(2.5)
@@ -251,8 +253,57 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 		end
 	end
 end)
+local endlessEndRemote = RS:FindFirstChild("EndlessEnd")
+if not endlessEndRemote then
+	endlessEndRemote = Instance.new("RemoteEvent")
+	endlessEndRemote.Name = "EndlessEnd"
+	endlessEndRemote.Parent = RS
+end
+
+endlessEndRemote.OnServerEvent:Connect(function(player)
+	local EndlessMode = require(game:GetService("ServerScriptService"):WaitForChild("EndlessMode"))
+	EndlessMode.Stop(player)
+
+	local totalTriaged = player:GetAttribute("CorrectCount") or 0
+	local totalAnswered = (player:GetAttribute("CorrectCount") or 0) + (player:GetAttribute("WrongCount") or 0)
+	local accuracy = totalAnswered > 0
+		and ((player:GetAttribute("CorrectCount") or 0) / totalAnswered * 100) or 0
+
+	task.spawn(function()
+		local DataStoreManager = require(game:GetService("ServerStorage"):WaitForChild("DataStoreManager"))
+		DataStoreManager.SaveSession(player, {
+			scenarioId     = "endless",
+			mode           = "Endless Mode",
+			totalScore     = player:GetAttribute("Score"),
+			accuracy       = accuracy,
+			correctCount   = player:GetAttribute("CorrectCount"),
+			wrongCount     = player:GetAttribute("WrongCount"),
+			totalPatients  = totalAnswered,
+			allSubmissions = allSubmissions[player] or {},
+		})
+	end)
+
+	sessionRemote:FireClient(player, {
+		totalScore     = player:GetAttribute("Score"),
+		correctCount   = player:GetAttribute("CorrectCount"),
+		wrongCount     = player:GetAttribute("WrongCount"),
+		totalPatients  = totalAnswered,
+		mistakes       = mistakes[player] or {},
+		allSubmissions = allSubmissions[player] or {},
+	})
+end)
 
 returnRemote.OnServerEvent:Connect(function(player, skipRespawn)
+	-- Stop endless mode dulu kalau masih jalan
+	if player:GetAttribute("InEndless") then
+		local ok, EndlessMode = pcall(function()
+			return require(game:GetService("ServerScriptService"):WaitForChild("EndlessMode"))
+		end)
+		if ok and EndlessMode then
+			EndlessMode.Stop(player)
+		end
+	end
+
 	HospitalRegistry.Release(player)
 
 	triaged[player]              = {}
@@ -263,8 +314,10 @@ returnRemote.OnServerEvent:Connect(function(player, skipRespawn)
 	player:SetAttribute("CorrectCount",      0)
 	player:SetAttribute("WrongCount",        0)
 	player:SetAttribute("PatientsRemaining", 0)
+	player:SetAttribute("InEndless",         false)
+	player:SetAttribute("CurrentScenarioId", "")
+	player:SetAttribute("CurrentScenarioMode", "")
 
-	-- [FIX]: Only respawn them if they haven't been kicked already
 	if not skipRespawn then
 		player:LoadCharacterAsync()
 	end
