@@ -397,6 +397,12 @@ end
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 local function getScenarioIdForPlayer(player)
+	-- [FIX]: If they are in Multiplayer, randomly pull from the Endless Pool!
+	if player:GetAttribute("InMultiplayer") then
+		local SCENARIO_POOL = { "food_poisoning", "industrial_explosion", "mixed_acute" }
+		return SCENARIO_POOL[math.random(#SCENARIO_POOL)]
+	end
+
 	return player:GetAttribute("CurrentScenarioId") or "food_poisoning"
 end
 

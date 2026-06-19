@@ -258,17 +258,20 @@ showUIRemote.OnClientEvent:Connect(function(patient)
 		local s = scoreFrame:FindFirstChild("ScoreText")
 		if s then s.Text = "Skor: " .. (player:GetAttribute("Score") or 0) end
 	end
+	
 	if counterFrame then
 		counterFrame.Visible = true
 		local c = counterFrame:FindFirstChild("PatientCounterText")
 		if c then
-			if player:GetAttribute("InEndless") then
-				c.Text = "Triaged: " .. (player:GetAttribute("CorrectCount") or 0)
+			-- If in Endless or Multiplayer, start at whatever their correct count is (starts at 0)
+			if player:GetAttribute("InEndless") or player:GetAttribute("InMultiplayer") then
+				c.Text = "Pasien: " .. (player:GetAttribute("CorrectCount") or 0)
 			else
 				c.Text = "Pasien: " .. (player:GetAttribute("PatientsRemaining") or "?")
 			end
 		end
 	end
+	
 	if timerFrame then timerFrame.Visible = true end
 
 	-- ── PatientInfoFrame ──────────────────────────────────────────────────────
@@ -541,22 +544,6 @@ vitalsUpdatedRemote.OnClientEvent:Connect(function(patientId, newVitals)
 	end
 end)
 
--- ── Live UI Updates (Runs independently of the Patient Menu) ──────────────────
-player:GetAttributeChangedSignal("PatientsRemaining"):Connect(function()
-	local gui = getGui()
-	if not gui then return end
-
-	local counterFrame = gui:FindFirstChild("PatientCounterFrame")
-	if counterFrame then
-		local counterText = counterFrame:FindFirstChild("PatientCounterText")
-		if counterText then
-			local remaining = player:GetAttribute("PatientsRemaining") or 0
-			counterText.Text = "Pasien: " .. remaining
-			-- Note: Change "Pasien: " to "Patients: " if you want it in English
-		end
-	end
-end)
-
 -- ── Force Close UI on Round End ──────────────────────────────────────────────
 local matchEndedRemote = RS:WaitForChild("MultiplayerMatchEnded", 5) or Instance.new("RemoteEvent")
 matchEndedRemote.OnClientEvent:Connect(function()
@@ -647,23 +634,28 @@ iotNotifRemote.OnClientEvent:Connect(function(message, colorKey)
 	end)
 end)
 
-player:GetAttributeChangedSignal("PatientsRemaining"):Connect(function()
+-- ── Live UI Updates (Counter) ────────────────────────────────────────────────
+local function updateCounterUI()
 	local gui = getGui()
 	if not gui then return end
+
 	local counterFrame = gui:FindFirstChild("PatientCounterFrame")
 	if counterFrame then
 		local counterText = counterFrame:FindFirstChild("PatientCounterText")
 		if counterText then
-			if player:GetAttribute("InEndless") then
-				local correct = player:GetAttribute("CorrectCount") or 0
-				counterText.Text = "Triaged: " .. correct
+			if player:GetAttribute("InEndless") or player:GetAttribute("InMultiplayer") then
+				counterText.Text = "Pasien: " .. (player:GetAttribute("CorrectCount") or 0)
 			else
 				local remaining = player:GetAttribute("PatientsRemaining") or 0
 				counterText.Text = "Pasien: " .. remaining
 			end
 		end
 	end
-end)
+end
+
+-- Listen to both attributes so the UI updates dynamically
+player:GetAttributeChangedSignal("PatientsRemaining"):Connect(updateCounterUI)
+player:GetAttributeChangedSignal("CorrectCount"):Connect(updateCounterUI)
 
 -- ── Endless Stop Button ───────────────────────────────────────────────────────
 local endlessEndRemote = RS:WaitForChild("EndlessEnd", 5) or Instance.new("RemoteEvent")

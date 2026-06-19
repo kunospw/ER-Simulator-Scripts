@@ -370,8 +370,9 @@ local function showMultiplayerView()
 	if headerLabel then headerLabel.Text = "Multiplayer Lobbies" end
 
 	clearList()
-	cardLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-
+	-- [FIX]: Change Left to Center to perfectly pad the 1, -16 widths
+	cardLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	
 	-- Check if player is currently in a lobby
 	local myLobby = nil
 	local myHostId = nil
@@ -494,65 +495,6 @@ local function showMultiplayerView()
 				readyLabel.Position = UDim2.new(0, 52, 0, 28)
 				readyLabel.TextXAlignment = Enum.TextXAlignment.Left
 				readyLabel.Parent = pCard
-			end
-		end
-
-		-- Scenario picker (host only) — compact list
-		if myLobby.HostName == player.Name then
-			local pickerLabel = Instance.new("TextLabel")
-			pickerLabel.Text = "Choose Scenario"
-			pickerLabel.TextSize = 11
-			pickerLabel.Font = Enum.Font.GothamBold
-			pickerLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
-			pickerLabel.BackgroundTransparency = 1
-			pickerLabel.Size = UDim2.new(1, -16, 0, 24)
-			pickerLabel.TextXAlignment = Enum.TextXAlignment.Left
-			pickerLabel.Parent = ScenarioList
-
-			local ScenarioData = require(RS:WaitForChild("ScenarioData"))
-			for _, scenario in ipairs(ScenarioData.Scenarios) do
-				local sBtn = Instance.new("TextButton")
-				sBtn.Text = scenario.title .. "  ·  " .. scenario.casualtyCount .. " korban"
-				sBtn.TextSize = 12
-				sBtn.Font = Enum.Font.Gotham
-				sBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-				sBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-				sBtn.Size = UDim2.new(1, -16, 0, 36)
-				sBtn.BorderSizePixel = 0
-				sBtn.TextXAlignment = Enum.TextXAlignment.Left
-				sBtn.Parent = ScenarioList
-				Instance.new("UICorner", sBtn).CornerRadius = UDim.new(0, 6)
-
-				local sp = Instance.new("UIPadding", sBtn)
-				sp.PaddingLeft = UDim.new(0, 10)
-
-				local diffColors = {
-					easy = Color3.fromRGB(34, 197, 94),
-					medium = Color3.fromRGB(234, 179, 8),
-					hard = Color3.fromRGB(239, 68, 68),
-				}
-				local dot = Instance.new("Frame")
-				dot.Size = UDim2.new(0, 6, 0, 6)
-				dot.Position = UDim2.new(1, -16, 0.5, -3)
-				dot.BackgroundColor3 = diffColors[scenario.difficulty] or diffColors.medium
-				dot.BorderSizePixel = 0
-				dot.Parent = sBtn
-				Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
-
-				sBtn.MouseButton1Click:Connect(function()
-					-- Highlight selected
-					for _, child in ipairs(ScenarioList:GetChildren()) do
-						if child:IsA("TextButton") and child ~= sBtn then
-							child.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-							child.TextColor3 = Color3.fromRGB(200, 200, 200)
-						end
-					end
-					sBtn.BackgroundColor3 = Color3.fromRGB(229, 57, 53)
-					sBtn.TextColor3 = Color3.new(1, 1, 1)
-					selectedScenarioId = scenario.id
-					-- Notify server (Denzel wires this to set CurrentScenarioId)
-					RS:WaitForChild("SetLobbyScenario"):FireServer(scenario.id)
-				end)
 			end
 		end
 

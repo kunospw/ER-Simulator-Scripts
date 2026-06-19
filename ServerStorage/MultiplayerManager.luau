@@ -1,4 +1,5 @@
--- MultiplayerManager (ModuleScript) — ServerStorage
+-- ServerStorage > MultiplayerManager (ModuleScript)
+
 local MultiplayerManager = {}
 
 local SS = game:GetService("ServerStorage")
@@ -28,7 +29,6 @@ cleanupMpSpawns.Name = "CleanupMPSpawns"
 local startMpRound = SS:WaitForChild("StartMPRound")
 local endMpRound = SS:WaitForChild("EndMPRound")
 
--- IoT timer adjust BindableEvent
 local iotAdjustMP = SS:FindFirstChild("IoTTimerAdjustMP")
 if not iotAdjustMP then
 	iotAdjustMP = Instance.new("BindableEvent")
@@ -36,6 +36,7 @@ if not iotAdjustMP then
 	iotAdjustMP.Parent = SS
 end
 
+-- [FIX]: Reverted to standard parameters
 function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 	local hospital = HospitalRegistry.AssignMulti(allPlayers)
 	if not hospital then return end
@@ -56,8 +57,11 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 					player:SetAttribute("AssignedHospitalId", hospital.id)
 					player:SetAttribute("AssignedBedIndex", i)
 
-					startMpRound:Fire(player)
+					-- [FIX]: Apply a generic mode text for the UI
+					player:SetAttribute("CurrentScenarioMode", "Multiplayer Mode")
 
+					startMpRound:Fire(player)
+					
 					local character = player.Character
 					if character and character:FindFirstChild("HumanoidRootPart") then
 						character.HumanoidRootPart.CFrame = CFrame.new(hospital.beds[i].position + Vector3.new(0, 3, 0))
@@ -68,12 +72,10 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 				end
 			end
 
-			-- 2. Run Timer (real countdown so IoT can adjust it)
 			local timeLeft = ROUND_TIME
 			local adjustConn = iotAdjustMP.Event:Connect(function(delta)
 				timeLeft = math.clamp(timeLeft + delta, 0, 600)
 				print(string.format("[Multiplayer] IoT timer adjust: %+d → %ds remaining", delta, timeLeft))
-				-- Notify all clients of the new time
 				for _, player in ipairs(activePlayers) do
 					if player and player.Parent then
 						matchStartedRemote:FireClient(player, timeLeft)
@@ -88,7 +90,6 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 
 			adjustConn:Disconnect()
 
-			-- 3. Evaluate Scores
 			local leaderboard = {}
 			for i = #activePlayers, 1, -1 do
 				local player = activePlayers[i]
@@ -108,7 +109,6 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 
 			table.sort(leaderboard, function(a, b) return a.score > b.score end)
 
-			-- 4. Check for Draw & Eliminate
 			local isDraw = (#leaderboard > 1) and (leaderboard[1].score == leaderboard[#leaderboard].score)
 			local eliminatedIndex = nil
 
@@ -142,7 +142,6 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 				end)
 			end
 
-			-- 5. Trigger UI
 			local clientLeaderboard = {}
 			for i, entry in ipairs(leaderboard) do
 				table.insert(clientLeaderboard, {
@@ -158,7 +157,6 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 				matchEndedRemote:FireClient(pData.playerObj, clientLeaderboard, isFinal)
 			end
 
-			-- 6. Voting Loop
 			if not isFinal then
 				local maxVotes = #activePlayers
 				local votes = {}

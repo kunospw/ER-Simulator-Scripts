@@ -2,8 +2,8 @@
 
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
+local SS = game:GetService("ServerStorage")
 
--- Dynamically create RemoteEvents if they don't exist
 local function getOrCreateRemote(name)
 	local remote = RS:FindFirstChild(name)
 	if not remote then
@@ -18,12 +18,16 @@ local createLobbyRemote = getOrCreateRemote("CreateLobby")
 local joinLobbyRemote   = getOrCreateRemote("JoinLobby")
 local leaveLobbyRemote  = getOrCreateRemote("LeaveLobby")
 local updateLobbiesRemote = getOrCreateRemote("UpdateLobbies")
+local requestLobbiesRemote = getOrCreateRemote("RequestLobbies")
+local startMatchRemote = getOrCreateRemote("StartMatch")
 
--- Data structure: lobbies[HostUserId] = { Host = Player, Players = {Player1, Player2...} }
+-- Pre-create these so MainmenuLocalScript doesn't time out
+getOrCreateRemote("MultiplayerMatchStarted")
+getOrCreateRemote("MultiplayerMatchEnded")
+
 local lobbies = {} 
 local MAX_PLAYERS = 4
 
--- Packages the lobby data into a clean table and sends it to all clients
 local function broadcastLobbies()
 	local lobbyData = {}
 	for hostId, lobby in pairs(lobbies) do
@@ -41,11 +45,10 @@ local function broadcastLobbies()
 	updateLobbiesRemote:FireAllClients(lobbyData)
 end
 
--- Force a player out of any existing lobbies they might be in
 local function removePlayerFromLobbies(player)
 	for hostId, lobby in pairs(lobbies) do
 		if lobby.Host == player then
-			lobbies[hostId] = nil -- Destroy the lobby entirely if the host leaves
+			lobbies[hostId] = nil 
 			broadcastLobbies()
 			return
 		end
@@ -84,44 +87,24 @@ end)
 
 Players.PlayerRemoving:Connect(removePlayerFromLobbies)
 
-local requestLobbiesRemote = getOrCreateRemote("RequestLobbies")
-
 requestLobbiesRemote.OnServerEvent:Connect(function(player)
 	broadcastLobbies()
 end)
 
-local setLobbyScenarioRemote = getOrCreateRemote("SetLobbyScenario")
-
-setLobbyScenarioRemote.OnServerEvent:Connect(function(player, scenarioId)
-	-- Store di lobby data, Denzel bisa pakai ini saat StartMatch
-	local lobby = lobbies[player.UserId]
-	if lobby and lobby.Host == player then
-		lobby.selectedScenarioId = scenarioId
-		print("[LobbyManager] Host set scenario:", scenarioId)
-	end
-end)
-
-local startMatchRemote = getOrCreateRemote("StartMatch")
-local SS = game:GetService("ServerStorage")
-
 startMatchRemote.OnServerEvent:Connect(function(player)
 	local lobby = lobbies[player.UserId]
 
-	-- Verify the player clicking start is actually the host of this lobby
 	if lobby and lobby.Host == player then
-		-- Enforce the 2-player minimum rule
 		if #lobby.Players >= 2 then
 			print("[LobbyManager] Starting Multiplayer Match for " .. player.Name .. "'s Lobby!")
 
-			-- Remove the lobby from the public list so no one else joins mid-game
 			lobbies[player.UserId] = nil 
 			broadcastLobbies()
 
-			-- Hand the lobby data off to the new Multiplayer module
 			local MultiplayerManager = require(SS:WaitForChild("MultiplayerManager"))
+			-- [FIX]: Back to just passing players and host
 			MultiplayerManager.StartMatch(lobby.Players, player)
 		else
-			-- Optional: Fire a remote here to show a toast UI saying "Need at least 2 players!"
 			warn("[LobbyManager] Not enough players to start match.")
 		end
 	end
