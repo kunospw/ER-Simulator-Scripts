@@ -49,6 +49,34 @@ ScenarioData.Scenarios = {
 			{ speakerName = "Perawat Triase", speakerRole = "Koordinator Triase — UGD", text = "Gunakan penilaian START. Identifikasi siapa yang paling membutuhkan penanganan segera.", dot = 3 },
 		},
 	},
+	{
+		id = "traffic_accident",
+		title = "Kecelakaan Lalu Lintas Beruntun",
+		description = "Tabrakan beruntun di jalan tol pagi hari melibatkan bus dan beberapa kendaraan. Korban dengan derajat cedera bervariasi dirujuk ke UGD.",
+		mode = "Challenge Mode",
+		casualtyCount = 6,
+		estimatedTime = 600,
+		difficulty = "medium",
+		dialogue = {
+			{ speakerName = "dr. Anwar", speakerRole = "Kepala UGD — RS Harapan Sehat", text = "Tabrakan beruntun di tol tadi pagi. Bus menabrak beberapa kendaraan, korban mulai berdatangan ke UGD kita.", dot = 1 },
+			{ speakerName = "dr. Anwar", speakerRole = "Kepala UGD — RS Harapan Sehat", text = "Kondisi bervariasi — ada yang bisa jalan sendiri, ada fraktur, trauma kepala, sampai trauma dada dengan distress napas.", dot = 2 },
+			{ speakerName = "dr. Anwar", speakerRole = "Kepala UGD — RS Harapan Sehat", text = "Lakukan triase START. Prioritaskan yang mengalami gangguan napas, perfusi buruk, atau penurunan kesadaran.", dot = 3 },
+		},
+	},
+	{
+		id = "earthquake_collapse",
+		title = "Gempa Bumi — Bangunan Runtuh",
+		description = "Gempa berkekuatan besar menyebabkan sebuah gedung runtuh. Tim SAR mengevakuasi korban secara bertahap ke UGD dengan cedera akibat reruntuhan.",
+		mode = "Exam Mode",
+		casualtyCount = 6,
+		estimatedTime = 600,
+		difficulty = "hard",
+		dialogue = {
+			{ speakerName = "dr. Sari", speakerRole = "Dokter Jaga UGD — RS Harapan Sehat", text = "Gempa tadi meruntuhkan gedung perkantoran. Tim SAR mengevakuasi korban secara bertahap ke sini.", dot = 1 },
+			{ speakerName = "dr. Sari", speakerRole = "Dokter Jaga UGD — RS Harapan Sehat", text = "Banyak cedera akibat reruntuhan — crush injury, fraktur, inhalasi debu, sampai trauma kepala berat.", dot = 2 },
+			{ speakerName = "dr. Sari", speakerRole = "Dokter Jaga UGD — RS Harapan Sehat", text = "Waktu dan sumber daya terbatas. Triase cepat dengan START, tentukan prioritas penanganan.", dot = 3 },
+		},
+	},
 }
 
 -- Patients are generated fresh each time GetScenario is called.
