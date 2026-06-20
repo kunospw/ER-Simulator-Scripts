@@ -16,9 +16,24 @@ ScenarioData.Scenarios = {
 		estimatedTime = 600,
 		difficulty = "medium",
 		dialogue = {
-			{ speakerName = "dr. Hartono", speakerRole = "Kepala UGD — RS Harapan Sehat", text = "4 korban sudah dalam perjalanan ke UGD kita. Kondisi bervariasi — luka bakar, trauma mata dan telinga, serta penurunan kesadaran.", dot = 1 },
-			{ speakerName = "dr. Hartono", speakerRole = "Kepala UGD — RS Harapan Sehat", text = "Sebagian besar pekerja mulai mengalami gejala 3–5 jam setelah makan. Konsisten dengan foodborne intoxication dari acara katering.", dot = 2 },
-			{ speakerName = "dr. Hartono", speakerRole = "Kepala UGD — RS Harapan Sehat", text = "Prioritaskan yang menunjukkan tanda syok atau penurunan kesadaran. Gunakan sistem triase START. Siap?", dot = 3 },
+			{
+				speakerName = "dr. Hartono",
+				speakerRole = "Kepala UGD — RS Harapan Sehat",
+				text = "Sebelas pekerja sedang dalam perjalanan ke UGD. Keluhannya mual, muntah, dan diare setelah makan siang bersama.",
+				dot = 1
+			},
+			{
+				speakerName = "dr. Hartono",
+				speakerRole = "Kepala UGD — RS Harapan Sehat",
+				text = "Mayoritas mulai bergejala sekitar 3 sampai 5 jam setelah makan. Ada yang masih bisa berjalan sendiri, tapi beberapa tampak dehidrasi dan lemas.",
+				dot = 2
+			},
+			{
+				speakerName = "dr. Hartono",
+				speakerRole = "Kepala UGD — RS Harapan Sehat",
+				text = "Prioritaskan pasien dengan tanda syok, penurunan kesadaran, atau perfusi yang buruk. Gunakan sistem triase START untuk menentukan prioritas.",
+				dot = 3
+			},
 		},
 	},
 	{
@@ -30,9 +45,24 @@ ScenarioData.Scenarios = {
 		estimatedTime = 480,
 		difficulty = "hard",
 		dialogue = {
-			{ speakerName = "dr. Sari", speakerRole = "Dokter Jaga UGD — RS Harapan Sehat", text = "Ledakan terjadi di laboratorium kimia pukul 09.45. Tim K3 merujuk beberapa pekerja ke sini dengan kondisi bervariasi.", dot = 1 },
-			{ speakerName = "dr. Sari", speakerRole = "Dokter Jaga UGD — RS Harapan Sehat", text = "Sebagian memakai APD lengkap, sebagian tidak. Ada yang mengalami luka bakar, trauma mata, dan trauma akustik.", dot = 2 },
-			{ speakerName = "dr. Sari", speakerRole = "Dokter Jaga UGD — RS Harapan Sehat", text = "Lakukan triase cepat. Tentukan zona yang tepat untuk setiap korban. Waktu adalah nyawa.", dot = 3 },
+			{
+				speakerName = "dr. Sari",
+				speakerRole = "Dokter Jaga UGD — RS Harapan Sehat",
+				text = "Terjadi ledakan di laboratorium kimia sekitar pukul 09.45. Beberapa pekerja sedang dirujuk ke UGD dengan berbagai jenis cedera.",
+				dot = 1
+			},
+			{
+				speakerName = "dr. Sari",
+				speakerRole = "Dokter Jaga UGD — RS Harapan Sehat",
+				text = "Laporan awal menyebutkan ada luka bakar, cedera mata akibat serpihan, dan trauma akibat gelombang ledakan.",
+				dot = 2
+			},
+			{
+				speakerName = "dr. Sari",
+				speakerRole = "Dokter Jaga UGD — RS Harapan Sehat",
+				text = "Lakukan triase cepat dan tentukan siapa yang harus masuk zona resusitasi lebih dulu.",
+				dot = 3
+			},
 		},
 	},
 	{
@@ -44,9 +74,24 @@ ScenarioData.Scenarios = {
 		estimatedTime = 720,
 		difficulty = "hard",
 		dialogue = {
-			{ speakerName = "Perawat Triase", speakerRole = "Koordinator Triase — UGD", text = "Dokter, UGD kita sedang kewalahan. Lima pasien baru masuk bersamaan. Tolong lakukan triase sekarang.", dot = 1 },
-			{ speakerName = "Perawat Triase", speakerRole = "Koordinator Triase — UGD", text = "Ada pasien gagal ginjal, PPOK eksaserbasi, dengue dengan syok, dan korban kecelakaan motor dengan fraktur terbuka.", dot = 2 },
-			{ speakerName = "Perawat Triase", speakerRole = "Koordinator Triase — UGD", text = "Gunakan penilaian START. Identifikasi siapa yang paling membutuhkan penanganan segera.", dot = 3 },
+			{
+				speakerName = "Perawat Triase",
+				speakerRole = "Koordinator Triase — UGD",
+				text = "Dokter, UGD sedang penuh dan beberapa pasien baru datang hampir bersamaan. Tolong lakukan triase sekarang.",
+				dot = 1
+			},
+			{
+				speakerName = "Perawat Triase",
+				speakerRole = "Koordinator Triase — UGD",
+				text = "Kasusnya beragam, mulai dari penyakit kronis yang memburuk sampai trauma akibat kecelakaan.",
+				dot = 2
+			},
+			{
+				speakerName = "Perawat Triase",
+				speakerRole = "Koordinator Triase — UGD",
+				text = "Gunakan penilaian START. Identifikasi siapa yang paling membutuhkan penanganan segera.",
+				dot = 3
+			},
 		},
 	},
 	{
@@ -58,9 +103,24 @@ ScenarioData.Scenarios = {
 		estimatedTime = 600,
 		difficulty = "medium",
 		dialogue = {
-			{ speakerName = "dr. Anwar", speakerRole = "Kepala UGD — RS Harapan Sehat", text = "Tabrakan beruntun di tol tadi pagi. Bus menabrak beberapa kendaraan, korban mulai berdatangan ke UGD kita.", dot = 1 },
-			{ speakerName = "dr. Anwar", speakerRole = "Kepala UGD — RS Harapan Sehat", text = "Kondisi bervariasi — ada yang bisa jalan sendiri, ada fraktur, trauma kepala, sampai trauma dada dengan distress napas.", dot = 2 },
-			{ speakerName = "dr. Anwar", speakerRole = "Kepala UGD — RS Harapan Sehat", text = "Lakukan triase START. Prioritaskan yang mengalami gangguan napas, perfusi buruk, atau penurunan kesadaran.", dot = 3 },
+			{
+				speakerName = "dr. Anwar",
+				speakerRole = "Kepala UGD — RS Harapan Sehat",
+				text = "Terjadi tabrakan beruntun di jalan tol pagi ini. Korban mulai berdatangan dari lokasi kejadian.",
+				dot = 1
+			},
+			{
+				speakerName = "dr. Anwar",
+				speakerRole = "Kepala UGD — RS Harapan Sehat",
+				text = "Cedera yang dilaporkan bervariasi, mulai dari luka ringan sampai trauma kepala dan trauma dada berat.",
+				dot = 2
+			},
+			{
+				speakerName = "dr. Anwar",
+				speakerRole = "Kepala UGD — RS Harapan Sehat",
+				text = "Lakukan triase cepat. Prioritaskan pasien dengan gangguan napas, perfusi buruk, atau penurunan kesadaran.",
+				dot = 3
+			},
 		},
 	},
 	{
@@ -72,9 +132,24 @@ ScenarioData.Scenarios = {
 		estimatedTime = 600,
 		difficulty = "hard",
 		dialogue = {
-			{ speakerName = "dr. Sari", speakerRole = "Dokter Jaga UGD — RS Harapan Sehat", text = "Gempa tadi meruntuhkan gedung perkantoran. Tim SAR mengevakuasi korban secara bertahap ke sini.", dot = 1 },
-			{ speakerName = "dr. Sari", speakerRole = "Dokter Jaga UGD — RS Harapan Sehat", text = "Banyak cedera akibat reruntuhan — crush injury, fraktur, inhalasi debu, sampai trauma kepala berat.", dot = 2 },
-			{ speakerName = "dr. Sari", speakerRole = "Dokter Jaga UGD — RS Harapan Sehat", text = "Waktu dan sumber daya terbatas. Triase cepat dengan START, tentukan prioritas penanganan.", dot = 3 },
+			{
+				speakerName = "dr. Sari",
+				speakerRole = "Dokter Jaga UGD — RS Harapan Sehat",
+				text = "Gempa menyebabkan runtuhnya sebuah gedung perkantoran. Tim SAR masih terus mengevakuasi korban ke sini.",
+				dot = 1
+			},
+			{
+				speakerName = "dr. Sari",
+				speakerRole = "Dokter Jaga UGD — RS Harapan Sehat",
+				text = "Korban yang datang mengalami berbagai cedera, termasuk fraktur, crush injury, trauma kepala, dan gangguan napas akibat debu reruntuhan.",
+				dot = 2
+			},
+			{
+				speakerName = "dr. Sari",
+				speakerRole = "Dokter Jaga UGD — RS Harapan Sehat",
+				text = "Sumber daya terbatas dan korban akan terus berdatangan. Gunakan triase START untuk menentukan prioritas penanganan.",
+				dot = 3
+			},
 		},
 	},
 }
@@ -84,9 +159,9 @@ ScenarioData.Scenarios = {
 function ScenarioData.GetScenario(scenarioId)
 	for _, scenario in ipairs(ScenarioData.Scenarios) do
 		if scenario.id == scenarioId then
-			-- Generate fresh patients for this session
-			scenario.patients = PatientGenerator.GenerateForScenario(scenarioId, scenario.casualtyCount)
-			return scenario
+			local scenarioCopy = table.clone(scenario)
+			scenarioCopy.patients = PatientGenerator.GenerateForScenario(scenarioId, scenario.casualtyCount)
+			return scenarioCopy
 		end
 	end
 	return nil
