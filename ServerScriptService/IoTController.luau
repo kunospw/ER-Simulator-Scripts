@@ -21,11 +21,26 @@ local function getAllActivePlayers()
 end
 
 local patientCleared   = SS:WaitForChild("PatientCleared")
-local iotTimerRemote   = RS:FindFirstChild("IoTTimerAdjust") 
+
+local iotTimerRemote   = RS:FindFirstChild("IoTTimerAdjust")
 if not iotTimerRemote then
 	iotTimerRemote = Instance.new("RemoteEvent")
 	iotTimerRemote.Name = "IoTTimerAdjust"
 	iotTimerRemote.Parent = RS
+end
+
+-- Notifikasi IoT (remote yang sama dipakai IoTServer + PatientUIController)
+local iotNotifRemote = RS:FindFirstChild("IoTNotification")
+if not iotNotifRemote then
+	iotNotifRemote = Instance.new("RemoteEvent")
+	iotNotifRemote.Name = "IoTNotification"
+	iotNotifRemote.Parent = RS
+end
+
+local function notifyAll(players, message, colorKey)
+	for _, player in ipairs(players) do
+		iotNotifRemote:FireClient(player, message, colorKey)
+	end
 end
 
 local function handleCommand(action)
@@ -46,14 +61,25 @@ local function handleCommand(action)
 			end
 			queue:Fire(player)
 		end
+		notifyAll(players, "➕ Pasien baru ditambahkan!", "YELLOW")
+
 	elseif action == "REMOVE_PATIENT" then
 		for _, player in ipairs(players) do
 			player:SetAttribute("IoTRemovePatient", true)
 		end
+		notifyAll(players, "⚠️ Kondisi semua pasien memburuk!", "RED")
+
 	elseif action == "ADD_TIME" then
 		for _, player in ipairs(players) do
 			iotTimerRemote:FireClient(player, 30)
 		end
+		notifyAll(players, "⏱️ +30 detik ditambahkan!", "GREEN")
+
+	elseif action == "SUBTRACT_TIME" then
+		for _, player in ipairs(players) do
+			iotTimerRemote:FireClient(player, -30)
+		end
+		notifyAll(players, "⏱️ -30 detik dikurangi!", "RED")
 	end
 end
 

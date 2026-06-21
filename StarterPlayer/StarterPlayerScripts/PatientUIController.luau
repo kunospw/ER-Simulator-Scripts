@@ -260,14 +260,17 @@ showUIRemote.OnClientEvent:Connect(function(patient)
 	end
 	
 	if counterFrame then
-		counterFrame.Visible = true
-		local c = counterFrame:FindFirstChild("PatientCounterText")
-		if c then
-			-- If in Endless or Multiplayer, start at whatever their correct count is (starts at 0)
-			if player:GetAttribute("InEndless") or player:GetAttribute("InMultiplayer") then
-				c.Text = "Pasien: " .. (player:GetAttribute("CorrectCount") or 0)
-			else
-				c.Text = "Pasien: " .. (player:GetAttribute("PatientsRemaining") or "?")
+		if player:GetAttribute("InMultiplayer") then
+			counterFrame.Visible = false   -- MP: counter gak guna, sembunyiin
+		else
+			counterFrame.Visible = true
+			local c = counterFrame:FindFirstChild("PatientCounterText")
+			if c then
+				if player:GetAttribute("InEndless") then
+					c.Text = "Pasien: " .. (player:GetAttribute("CorrectCount") or 0)
+				else
+					c.Text = "Pasien: " .. (player:GetAttribute("PatientsRemaining") or "?")
+				end
 			end
 		end
 	end

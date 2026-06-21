@@ -397,8 +397,8 @@ end
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 local function getScenarioIdForPlayer(player)
-	-- [FIX]: If they are in Multiplayer, randomly pull from the Endless Pool!
-	if player:GetAttribute("InMultiplayer") then
+	-- [FIX]: MP & Endless sama-sama pull random dari pool ("endless" bukan scenario asli)
+	if player:GetAttribute("InMultiplayer") or player:GetAttribute("InEndless") then
 		local SCENARIO_POOL = { "food_poisoning", "industrial_explosion", "mixed_acute" }
 		return SCENARIO_POOL[math.random(#SCENARIO_POOL)]
 	end
@@ -455,7 +455,6 @@ if not iotAddPatient then
 	iotAddPatient.Name = "IoTAddPatient"
 	iotAddPatient.Parent = SS
 end
-
 iotAddPatient.Event:Connect(function(player)
 	if not spawnedPatients[player] then return end
 
@@ -463,6 +462,28 @@ iotAddPatient.Event:Connect(function(player)
 	local hospital = HospitalRegistry.Hospitals[hId]
 	if not hospital then return end
 
+	-- [FIX] Di MP, tiap pemain cuma punya SATU bed (AssignedBedIndex).
+	-- Jangan scan semua bed — itu bisa kepilih bed punya pemain lain → numpuk.
+	if player:GetAttribute("InMultiplayer") then
+		local mySlot = player:GetAttribute("AssignedBedIndex")
+		if not mySlot then return end
+
+		if spawnedPatients[player][mySlot] then
+			-- Bed sendiri masih keisi → gak ada tempat, abaikan
+			-- (queue di MP gak akan ke-spawn, jadi mending no-op)
+			print("[IoT] (MP) Bed masih keisi, ADD diabaikan untuk", player.Name)
+			return
+		end
+
+		local randomPatient = PatientGenerator.GenerateOne(getScenarioIdForPlayer(player))
+		spawnOnePatient(player, randomPatient, mySlot, hospital.beds, getScenarioModeForPlayer(player))
+		player:SetAttribute("PatientsRemaining",
+			(player:GetAttribute("PatientsRemaining") or 0) + 1)
+		print("[IoT] (MP) Added patient to slot", mySlot, "for", player.Name)
+		return
+	end
+
+	-- Singleplayer / Endless: scan bed kosong pertama (perilaku lama)
 	local emptySlot = nil
 	for i = 1, #hospital.beds do
 		if not spawnedPatients[player][i] then
@@ -486,37 +507,82 @@ iotAddPatient.Event:Connect(function(player)
 	end
 end)
 
+-- ── IoT Surge (force-degrade semua pasien aktif satu tick) ────────────────────
+-- Dipakai oleh REMOVE_PATIENT command (dialihkan dari hapus-pasien jadi surge).
+-- Logic degrade di-copy dari startDeteriorationLoop (Cara B: sengaja terpisah
+-- biar gak ganggu loop deterioration yang sudah jalan).
+local function degradeOneNPC(npc, owner)
+	if not npc or not npc.Parent then return end
+	if npc:GetAttribute("Triaged") then return end
+
+	local rate = npc:GetAttribute("DeteriorationRate") or 0
+	-- BLACK / GREEN murni (rate 0) tetap ikut memburuk sedikit saat surge,
+	-- tapi pasien yang sudah BLACK (rr 0, gcs 3) di-skip.
+	local rrStr = npc:GetAttribute("Breathing") or "0x/mnt"
+	local rr    = tonumber(rrStr:match("%d+")) or 0
+	local gcs   = npc:GetAttribute("GCS") or 15
+	local perf  = npc:GetAttribute("Perfusion") or "Normal"
+	local hr    = npc:GetAttribute("HR") or 80
+	local crt   = (perf == "Terlambat") and "Terlambat" or "Normal"
+
+	-- Sudah BLACK: skip
+	if rr == 0 and gcs <= 3 then return end
+
+	-- Degrade satu tick (sama seperti deterioration loop)
+	rr  = math.min(rr + math.random(1, 3), 40)
+	local gcsDelta = (rate >= 0.8) and math.random(1, 2) or 1
+	gcs = math.max(gcs - gcsDelta, 3)
+	hr  = math.min(hr + math.random(3, 8), 160)
+	if gcs < 12 or rr > 28 then
+		crt = "Terlambat"
+	end
+
+	local newTriage = applySTART(rr, crt, gcs)
+
+	npc:SetAttribute("Breathing", tostring(rr) .. "x/mnt")
+	npc:SetAttribute("GCS",       gcs)
+	npc:SetAttribute("HR",        hr)
+	npc:SetAttribute("Perfusion", crt == "Terlambat" and "Terlambat" or "Normal")
+	npc:SetAttribute("Mental",    gcs >= 13 and "Sadar" or "Terganggu")
+	npc:SetAttribute("CorrectTriage", newTriage)
+
+	-- Update animasi kalau threshold GCS kelewat
+	local prevAnimId = getAnimIdForGCS(gcs + gcsDelta)
+	local newAnimId  = getAnimIdForGCS(gcs)
+	if newAnimId ~= prevAnimId then
+		playPatientAnim(npc, gcs)
+	end
+
+	-- Update UI kalau pasien ini lagi diperiksa
+	if owner and owner.Parent then
+		local patientId = npc:GetAttribute("PatientID")
+		vitalsUpdatedRemote:FireClient(owner, patientId, {
+			breathing = tostring(rr) .. "x/mnt",
+			perfusion = crt == "Terlambat" and "Terlambat" or "Normal",
+			mental    = gcs >= 13 and "Sadar" or "Terganggu",
+			gcs       = gcs,
+			hr        = hr,
+		})
+	end
+end
+
+local function surgeOnce(player)
+	if not spawnedPatients[player] then return end
+	local count = 0
+	for _, npc in pairs(spawnedPatients[player]) do
+		degradeOneNPC(npc, player)
+		count += 1
+	end
+	print(string.format("[IoT] Surge: degraded %d patients for %s", count, player.Name))
+end
+
 -- ── IoT Remove Patient ────────────────────────────────────────────────────────
 game:GetService("Players").PlayerAdded:Connect(function() end)
 
 local function handleRemovePatient(player)
-	local hId = player:GetAttribute("AssignedHospitalId")
-	local hospital = hId and HospitalRegistry.Hospitals[hId]
-	if not hospital then return end
-
-	if patientQueues[player] and #patientQueues[player] > 0 then
-		table.remove(patientQueues[player], #patientQueues[player])
-		player:SetAttribute("PatientsRemaining",
-			math.max(0, (player:GetAttribute("PatientsRemaining") or 1) - 1))
-		print("[IoT] Removed last queued patient for", player.Name)
-		return
-	end
-
-	if not spawnedPatients[player] then return end
-
-	for i = #hospital.beds, 1, -1 do
-		local npc = spawnedPatients[player][i]
-		if npc and npc.Parent and not npc:GetAttribute("Triaged") then
-			npc:Destroy()
-			spawnedPatients[player][i] = nil
-			player:SetAttribute("PatientsRemaining",
-				math.max(0, (player:GetAttribute("PatientsRemaining") or 1) - 1))
-			print("[IoT] Removed spawned patient from slot", i, "for", player.Name)
-			return
-		end
-	end
-
-	print("[IoT] No removable patient found for", player.Name)
+	-- [CHANGED] REMOVE_PATIENT dialihkan: bukan lagi menghapus pasien dari bed,
+	-- tapi memicu surge — semua pasien aktif memburuk satu tingkat.
+	surgeOnce(player)
 end
 
 game:GetService("Players").PlayerAdded:Connect(function(player)

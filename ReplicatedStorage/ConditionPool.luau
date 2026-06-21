@@ -335,13 +335,12 @@ ConditionPool.Conditions = {
 				complaint   = "Mengantuk, bicara mengigau, muntah sejak pagi. Riwayat hemodialisis rutin, tidak HD selama 5 hari.",
 				rr          = { 22, 26 },
 				nadi        = { 92, 108 },
-				gcs         = { 11, 12 },
+				gcs         = { 13, 14 },
 				crt         = "Normal",
 				td_sys      = { 140, 165 },
 				canWalk     = false,
-				-- GCS 11-12 → RED jika < 13, tapi CRT Normal dan RR ≤ 30
-				-- START: GCS < 13 → RED. Kondisi ini perlu diperhatikan
-				-- Kita simpan YELLOW sesuai konteks klinis (uremia kronis, bukan akut berat)
+				-- GCS 13-14: ensefalopati uremikum ringan, masih ikut perintah → YELLOW konsisten START.
+				-- Bila deteriorate (rate 0.4) → GCS turun <13 → classifier re-label RED (mekanik intended).
 				deteriorationRate = 0.4,
 			},
 			{
@@ -388,6 +387,248 @@ ConditionPool.Conditions = {
 				gcs         = { 15, 15 },
 				crt         = "Normal",
 				td_sys      = { 110, 130 },
+				canWalk     = true,
+				deteriorationRate = 0.0,
+			},
+		},
+	},
+
+	-- ══════════════════════════════════════════════════════════════════════════
+	-- TRAFFIC ACCIDENT
+	-- ══════════════════════════════════════════════════════════════════════════
+	traffic_accident = {
+
+		BLACK = {
+			{
+				name        = "Cedera Multipel — Henti Napas Pasca Trauma",
+				complaint   = "Korban terlempar dari kendaraan, ditemukan tidak responsif. Tidak bernapas, tidak ada nadi.",
+				rr          = { 0, 0 },
+				nadi        = { 0, 0 },
+				gcs         = { 3, 3 },
+				crt         = "Terlambat",
+				td_sys      = { 0, 0 },
+				canWalk     = false,
+				deteriorationRate = 0,
+			},
+		},
+
+		RED = {
+			{
+				name        = "Cedera Kepala Sedang–Berat",
+				complaint   = "Benturan kepala, muntah, bicara kacau, makin mengantuk. Tidak dapat mengikuti perintah dengan benar.",
+				rr          = { 24, 28 },
+				nadi        = { 100, 115 },
+				gcs         = { 9, 12 },
+				crt         = "Normal",
+				td_sys      = { 95, 110 },
+				canWalk     = false,
+				-- GCS < 13 → RED
+				deteriorationRate = 0.6,
+			},
+			{
+				name        = "Trauma Toraks — Suspek Tension Pneumothorax",
+				complaint   = "Sesak berat setelah benturan dada ke setir. Napas cepat dan dangkal, bibir kebiruan.",
+				rr          = { 32, 38 },
+				nadi        = { 118, 130 },
+				gcs         = { 15, 15 },
+				crt         = "Normal",
+				spo2        = { 86, 92 },
+				td_sys      = { 88, 100 },
+				canWalk     = false,
+				-- RR > 30 → RED
+				deteriorationRate = 0.9,
+			},
+			{
+				name        = "Fraktur Femur Terbuka — Syok Hemoragik",
+				complaint   = "Luka terbuka paha, perdarahan aktif, fragmen tulang terlihat. Tampak pucat dan lemah.",
+				rr          = { 24, 29 },
+				nadi        = { 125, 138 },
+				gcs         = { 13, 14 },
+				crt         = "Terlambat",
+				td_sys      = { 78, 92 },
+				canWalk     = false,
+				-- CRT Terlambat → RED
+				deteriorationRate = 0.7,
+			},
+		},
+
+		YELLOW = {
+			{
+				name        = "Fraktur Tertutup Ekstremitas",
+				complaint   = "Nyeri hebat tungkai, tidak bisa berjalan. Tampak deformitas. Sadar penuh.",
+				rr          = { 18, 22 },
+				nadi        = { 90, 100 },
+				gcs         = { 15, 15 },
+				crt         = "Normal",
+				td_sys      = { 110, 125 },
+				canWalk     = false,
+				deteriorationRate = 0.1,
+			},
+			{
+				name        = "Dislokasi Sendi Besar",
+				complaint   = "Nyeri bahu, lengan sulit digerakkan, tampak benjolan di sendi. Sadar dan stabil.",
+				rr          = { 18, 21 },
+				nadi        = { 88, 98 },
+				gcs         = { 15, 15 },
+				crt         = "Normal",
+				td_sys      = { 112, 126 },
+				canWalk     = false,
+				deteriorationRate = 0.1,
+			},
+			{
+				name        = "Vulnus Laceratum Luas — Perdarahan Terkontrol",
+				complaint   = "Luka robek cukup luas di tungkai, perdarahan sudah ditekan dan terkontrol. Sadar, nyeri sedang.",
+				rr          = { 18, 22 },
+				nadi        = { 90, 104 },
+				gcs         = { 15, 15 },
+				crt         = "Normal",
+				td_sys      = { 108, 122 },
+				canWalk     = false,
+				deteriorationRate = 0.2,
+			},
+		},
+
+		GREEN = {
+			{
+				name        = "Vulnus Excoriatum Multipel",
+				complaint   = "Luka lecet di lengan dan lutut. Bisa berjalan keluar sendiri dari kendaraan. Cemas tapi kooperatif.",
+				rr          = { 16, 20 },
+				nadi        = { 82, 95 },
+				gcs         = { 15, 15 },
+				crt         = "Normal",
+				td_sys      = { 115, 128 },
+				canWalk     = true,
+				deteriorationRate = 0.0,
+			},
+			{
+				name        = "Cedera Jaringan Lunak Minor",
+				complaint   = "Memar dan nyeri ringan di bahu dan pinggang. Bisa berjalan, sadar penuh, tanda vital stabil.",
+				rr          = { 15, 19 },
+				nadi        = { 78, 92 },
+				gcs         = { 15, 15 },
+				crt         = "Normal",
+				td_sys      = { 112, 126 },
+				canWalk     = true,
+				deteriorationRate = 0.0,
+			},
+		},
+	},
+
+	-- ══════════════════════════════════════════════════════════════════════════
+	-- EARTHQUAKE COLLAPSE
+	-- ══════════════════════════════════════════════════════════════════════════
+	earthquake_collapse = {
+
+		BLACK = {
+			{
+				name        = "Asfiksia Traumatik — Tertimbun Lama",
+				complaint   = "Korban tertimbun reruntuhan dalam waktu lama. Saat dievakuasi sudah tidak bernapas dan tidak ada nadi.",
+				rr          = { 0, 0 },
+				nadi        = { 0, 0 },
+				gcs         = { 3, 3 },
+				crt         = "Terlambat",
+				td_sys      = { 0, 0 },
+				canWalk     = false,
+				deteriorationRate = 0,
+			},
+		},
+
+		RED = {
+			{
+				name        = "Crush Injury — Risiko Crush Syndrome",
+				complaint   = "Tungkai lama tertimpa beton sebelum dievakuasi. Tampak bengkak, lemah, urin kemerahan.",
+				rr          = { 22, 26 },
+				nadi        = { 115, 128 },
+				gcs         = { 13, 14 },
+				crt         = "Terlambat",
+				td_sys      = { 85, 98 },
+				canWalk     = false,
+				-- CRT Terlambat → RED
+				deteriorationRate = 0.6,
+			},
+			{
+				name        = "Cedera Inhalasi Debu — Distres Napas Akut",
+				complaint   = "Sesak berat setelah terpapar debu reruntuhan dalam ruang tertutup. Napas cepat, batuk hebat.",
+				rr          = { 32, 37 },
+				nadi        = { 112, 125 },
+				gcs         = { 15, 15 },
+				crt         = "Normal",
+				spo2        = { 86, 92 },
+				td_sys      = { 102, 118 },
+				canWalk     = false,
+				-- RR > 30 → RED
+				deteriorationRate = 0.8,
+			},
+			{
+				name        = "Cedera Kepala Berat",
+				complaint   = "Tertimpa material di kepala. Tidak sadar penuh, hanya mengerang, tidak mengikuti perintah.",
+				rr          = { 20, 25 },
+				nadi        = { 100, 114 },
+				gcs         = { 8, 11 },
+				crt         = "Normal",
+				td_sys      = { 98, 112 },
+				canWalk     = false,
+				-- GCS < 13 → RED
+				deteriorationRate = 0.7,
+			},
+		},
+
+		YELLOW = {
+			{
+				name        = "Fraktur Tertutup dengan Laserasi Kepala",
+				complaint   = "Lengan nyeri dan bengkok, luka robek di kepala. Sadar penuh dan kooperatif.",
+				rr          = { 19, 23 },
+				nadi        = { 90, 102 },
+				gcs         = { 15, 15 },
+				crt         = "Normal",
+				td_sys      = { 112, 126 },
+				canWalk     = false,
+				deteriorationRate = 0.15,
+			},
+			{
+				name        = "Vulnus Laceratum — Perdarahan Terkontrol",
+				complaint   = "Luka robek di paha, perdarahan sudah ditekan dan terkontrol. Sadar, stabil, nyeri sedang.",
+				rr          = { 18, 22 },
+				nadi        = { 92, 104 },
+				gcs         = { 15, 15 },
+				crt         = "Normal",
+				td_sys      = { 110, 124 },
+				canWalk     = false,
+				deteriorationRate = 0.2,
+			},
+			{
+				name        = "Cedera Kepala Ringan — Sadar Penuh",
+				complaint   = "Terbentur material ringan di kepala, sempat pusing. Sadar penuh, ingat kejadian, tidak muntah.",
+				rr          = { 18, 22 },
+				nadi        = { 88, 100 },
+				gcs         = { 15, 15 },
+				crt         = "Normal",
+				td_sys      = { 115, 128 },
+				canWalk     = false,
+				deteriorationRate = 0.2,
+			},
+		},
+
+		GREEN = {
+			{
+				name        = "Vulnus Excoriatum — Paparan Debu Ringan",
+				complaint   = "Keluar sendiri dari reruntuhan. Luka lecet, berdebu, sedikit batuk. Bisa berjalan dan menjawab dengan jelas.",
+				rr          = { 17, 21 },
+				nadi        = { 84, 96 },
+				gcs         = { 15, 15 },
+				crt         = "Normal",
+				td_sys      = { 114, 128 },
+				canWalk     = true,
+				deteriorationRate = 0.0,
+			},
+			{
+				name        = "Lecet dan Memar Minor",
+				complaint   = "Lecet dan memar ringan akibat reruntuhan. Bisa berjalan keluar sendiri, sadar penuh, tanda vital stabil.",
+				rr          = { 15, 19 },
+				nadi        = { 78, 92 },
+				gcs         = { 15, 15 },
+				crt         = "Normal",
+				td_sys      = { 112, 126 },
 				canWalk     = true,
 				deteriorationRate = 0.0,
 			},

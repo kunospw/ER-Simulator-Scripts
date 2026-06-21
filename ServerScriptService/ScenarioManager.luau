@@ -188,6 +188,7 @@ triggerRemote.OnServerEvent:Connect(function(player, scenarioId)
 		return
 	end
 	player:SetAttribute("CurrentScenarioId", scenarioId)
+	player:SetAttribute("AssignedHospitalId", hospital.id)
 	local isEndless = (scenarioId == "endless")
 	player:SetAttribute("InEndless", isEndless)
 	if isEndless then
