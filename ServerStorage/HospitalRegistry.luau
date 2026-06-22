@@ -9,10 +9,10 @@ HospitalRegistry.Hospitals = {
 		entranceCFrame = CFrame.new(541.287, 11.036, 31.56),
 		spawnPosition = Vector3.new(528, 2.71, 54),
 		beds = {
-			{ position = Vector3.new(571.985, 5, 14.062),  yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(571.985, 5, -0.123), yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(571.985, 5, -13.651), yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(571.985, 5, -28.361), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(569.949, 5.157, 11.975),  yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(569.946, 5.157, -2.247), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(569.946, 5.157, -15.764), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(569.946, 5.157, -30.432), yRot = 180, pose = "Lying" },
 		},
 	},
 	{

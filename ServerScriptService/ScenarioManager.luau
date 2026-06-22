@@ -199,7 +199,7 @@ triggerRemote.OnServerEvent:Connect(function(player, scenarioId)
 	if scenario then
 		player:SetAttribute("CurrentScenarioMode", scenario.mode or "")
 	end
-	
+
 	-- Reset cinematic NPCs ke posisi awal sebelum cinematic jalan
 	resetCinematicNPCs(hospital.id)
 
@@ -248,11 +248,27 @@ triggerRemote.OnServerEvent:Connect(function(player, scenarioId)
 		if worker1 then weldModelToStretcher(worker1, stretcher) end
 		if worker2 then weldModelToStretcher(worker2, stretcher) end
 
+		-- [FIX] Matikan collision seluruh assembly cinematic di SERVER selama lerp.
+		-- Stretcher digerakin paksa lewat CFrame tiap frame; kalau masih CanCollide,
+		-- pas nyentuh tembok physics nyoba dorong dia → tarik-tarikan = kepentok/jitter.
+		-- CanCollide & Anchored dibalikin normal otomatis sama resetCinematicNPCs()
+		-- tiap sesi baru, jadi gak ada efek samping.
+		for _, m in ipairs({ stretcher, dummy, worker1, worker2 }) do
+			if m then
+				if m:IsA("BasePart") then m.CanCollide = false end
+				for _, part in ipairs(m:GetDescendants()) do
+					if part:IsA("BasePart") then part.CanCollide = false end
+				end
+			end
+		end
+
 		local track1     = playWalkAnim(worker1)
 		local track2     = playWalkAnim(worker2)
 		local dummyTrack = playDummyAnim(dummy)
 
-		task.delay(DURATION + 1, function()
+		-- [FIX] Stop animasi PERSIS pas gerak berhenti (dulu DURATION + 1 → kaki
+		-- masih jalan 1 detik di tempat pas udah nyampe, keliatan kayak nabrakin diri).
+		task.delay(DURATION, function()
 			if track1     then track1:Stop() end
 			if track2     then track2:Stop() end
 			if dummyTrack then dummyTrack:Stop() end
@@ -270,6 +286,9 @@ triggerRemote.OnServerEvent:Connect(function(player, scenarioId)
 			local alpha = math.min(elapsed / DURATION, 1)
 			stretcher.CFrame = startCF:Lerp(targetCF, alpha)
 			if alpha >= 1 then
+				-- [FIX] Freeze pas nyampe biar gak kedorong / ngedrift sama physics
+				-- selama nunggu di-hide.
+				stretcher.Anchored = true
 				connection:Disconnect()
 				print("[CinematicMover] Done for Hospital" .. hospital.id)
 			end

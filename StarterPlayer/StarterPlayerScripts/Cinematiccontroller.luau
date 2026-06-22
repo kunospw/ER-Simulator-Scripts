@@ -172,7 +172,7 @@ startRemote.OnClientEvent:Connect(function(scenarioId)
 			end
 			if obj:IsA("BasePart") then
 				obj.Transparency = 0
-				obj.CanCollide = (name == "StretcherCinematic") -- changed
+				obj.CanCollide = false
 			end
 		end
 	end

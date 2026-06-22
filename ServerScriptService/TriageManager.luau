@@ -34,6 +34,7 @@ startMpRound.Event:Connect(function(player)
 	player:SetAttribute("Score", 0)
 	player:SetAttribute("CorrectCount", 0)
 	player:SetAttribute("WrongCount", 0)
+	player:SetAttribute("Streak", 0)
 end)
 
 -- Fires the SessionResult stats normally when a multiplayer round ends
@@ -58,6 +59,8 @@ sessionEvent.Event:Connect(function(player, count)
 	player:SetAttribute("CorrectCount",      0)
 	player:SetAttribute("WrongCount",        0)
 	player:SetAttribute("PatientsRemaining", count)
+	player:SetAttribute("Streak",            0)
+	player:SetAttribute("BestStreak",        0)
 
 	print("[TriageManager] Session started —", player.Name, "—", count, "patients")
 end)
@@ -72,6 +75,8 @@ Players.PlayerAdded:Connect(function(player)
 	player:SetAttribute("CorrectCount",      0)
 	player:SetAttribute("WrongCount",        0)
 	player:SetAttribute("PatientsRemaining", 0)
+	player:SetAttribute("Streak",            0)
+	player:SetAttribute("BestStreak",        0)
 	DataStoreManager.InitPlayer(player)
 
 end)
@@ -148,7 +153,7 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 
 	local currentScore = player:GetAttribute("Score") or 0
 	player:SetAttribute("Score", currentScore + pointsDelta)
-	
+
 	-- Track all submissions
 	if not allSubmissions[player] then allSubmissions[player] = {} end
 	table.insert(allSubmissions[player], {
@@ -164,18 +169,27 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 
 	if isCorrect then
 		player:SetAttribute("CorrectCount", (player:GetAttribute("CorrectCount") or 0) + 1)
+
+		-- streak naik + simpen rekor
+		local newStreak = (player:GetAttribute("Streak") or 0) + 1
+		player:SetAttribute("Streak", newStreak)
+		if newStreak > (player:GetAttribute("BestStreak") or 0) then
+			player:SetAttribute("BestStreak", newStreak)
+		end
+
 		if not player:GetAttribute("InEndless") then
 			player:SetAttribute("PatientsRemaining", (player:GetAttribute("PatientsRemaining") or 1) - 1)
-		end	
+		end
 	else
 		player:SetAttribute("WrongCount", (player:GetAttribute("WrongCount") or 0) + 1)
+		player:SetAttribute("Streak", 0)   -- salah/timeout → streak putus
+
 		table.insert(mistakes[player], {
 			name         = targetNPC.Name,
 			diagnosis    = targetNPC:GetAttribute("Diagnosis") or "Unknown",
 			chosen       = chosenTriage,
 			correct      = correctTriage,
 			responseTime = responseTime,
-
 		})
 	end
 
@@ -249,6 +263,7 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 				totalPatients  = totalPatients,
 				mistakes       = mistakes[player],
 				allSubmissions = allSubmissions[player],
+				bestStreak     = player:GetAttribute("BestStreak") or 0, 
 			})
 		end
 	end
@@ -314,6 +329,8 @@ returnRemote.OnServerEvent:Connect(function(player, skipRespawn)
 	player:SetAttribute("CorrectCount",      0)
 	player:SetAttribute("WrongCount",        0)
 	player:SetAttribute("PatientsRemaining", 0)
+	player:SetAttribute("Streak",            0)
+	player:SetAttribute("BestStreak",        0)
 	player:SetAttribute("InEndless",         false)
 	player:SetAttribute("CurrentScenarioId", "")
 	player:SetAttribute("CurrentScenarioMode", "")

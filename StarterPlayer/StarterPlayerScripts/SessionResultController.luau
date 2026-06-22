@@ -95,7 +95,13 @@ sessionRemote.OnClientEvent:Connect(function(data)
 
 	local possiblePTS = scoreUserContainer:FindFirstChild("PossiblePTSText", true)
 	if possiblePTS then
-		possiblePTS.Text = "out of " .. (data.totalPatients * 10) .. " possible pts"
+		-- [NEW] Di endless, payload bawa bestStreak → tampilin rekor streak.
+		-- Mode lain (normal/MP) gak ngirim bestStreak → teks "possible pts" seperti biasa.
+		if data.bestStreak then
+			possiblePTS.Text = "🔥 Streak terpanjang: " .. data.bestStreak
+		else
+			possiblePTS.Text = "out of " .. (data.totalPatients * 10) .. " possible pts"
+		end
 	end
 
 	-- ── Stats ──────────────────────────────────────────────────────────────────

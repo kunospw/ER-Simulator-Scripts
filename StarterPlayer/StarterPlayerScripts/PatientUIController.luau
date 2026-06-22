@@ -243,7 +243,7 @@ end
 showUIRemote.OnClientEvent:Connect(function(patient)
 	local gui = getGui()
 	if not gui then return end
-	
+
 	setStopButtonVisible(false)
 
 	local head = patient:FindFirstChild("Head")
@@ -258,7 +258,7 @@ showUIRemote.OnClientEvent:Connect(function(patient)
 		local s = scoreFrame:FindFirstChild("ScoreText")
 		if s then s.Text = "Skor: " .. (player:GetAttribute("Score") or 0) end
 	end
-	
+
 	if counterFrame then
 		if player:GetAttribute("InMultiplayer") then
 			counterFrame.Visible = false   -- MP: counter gak guna, sembunyiin
@@ -267,14 +267,14 @@ showUIRemote.OnClientEvent:Connect(function(patient)
 			local c = counterFrame:FindFirstChild("PatientCounterText")
 			if c then
 				if player:GetAttribute("InEndless") then
-					c.Text = "Pasien: " .. (player:GetAttribute("CorrectCount") or 0)
+					c.Text = "🔥 Streak: " .. (player:GetAttribute("Streak") or 0)
 				else
 					c.Text = "Pasien: " .. (player:GetAttribute("PatientsRemaining") or "?")
 				end
 			end
 		end
 	end
-	
+
 	if timerFrame then timerFrame.Visible = true end
 
 	-- ── PatientInfoFrame ──────────────────────────────────────────────────────
@@ -646,7 +646,9 @@ local function updateCounterUI()
 	if counterFrame then
 		local counterText = counterFrame:FindFirstChild("PatientCounterText")
 		if counterText then
-			if player:GetAttribute("InEndless") or player:GetAttribute("InMultiplayer") then
+			if player:GetAttribute("InEndless") then
+				counterText.Text = "🔥 Streak: " .. (player:GetAttribute("Streak") or 0)
+			elseif player:GetAttribute("InMultiplayer") then
 				counterText.Text = "Pasien: " .. (player:GetAttribute("CorrectCount") or 0)
 			else
 				local remaining = player:GetAttribute("PatientsRemaining") or 0
@@ -656,9 +658,10 @@ local function updateCounterUI()
 	end
 end
 
--- Listen to both attributes so the UI updates dynamically
+-- Listen to the attributes so the UI updates dynamically
 player:GetAttributeChangedSignal("PatientsRemaining"):Connect(updateCounterUI)
 player:GetAttributeChangedSignal("CorrectCount"):Connect(updateCounterUI)
+player:GetAttributeChangedSignal("Streak"):Connect(updateCounterUI)
 
 -- ── Endless Stop Button ───────────────────────────────────────────────────────
 local endlessEndRemote = RS:WaitForChild("EndlessEnd", 5) or Instance.new("RemoteEvent")

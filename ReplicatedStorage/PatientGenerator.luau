@@ -295,6 +295,13 @@ function PatientGenerator.GenerateForScenario(scenarioId, count)
 	return patients
 end
 
+-- ── Unique ID counter untuk pasien runtime (endless / MP / IoT) ───────────────
+-- [FIX] Dulu pakai math.random(100, 999) → ID bisa BENTROK di endless run yang
+-- panjang, bikin triase ditolak diam-diam ("Already triaged") + bed nyangkut.
+-- Counter monotonic ini ngejamin ID selalu unik selama server hidup.
+-- Offset 1000 supaya gak pernah nabrak ID dari GenerateForScenario (1..count).
+local genOneCounter = 0
+
 -- Generate a single random patient (used by IoT ADD_PATIENT and multiplayer)
 -- This replaces the old `generateRandomPatient()` in PatientSpawner
 function PatientGenerator.GenerateOne(scenarioId)
@@ -316,8 +323,8 @@ function PatientGenerator.GenerateOne(scenarioId)
 		triage = "YELLOW"
 	end
 
-	local index = math.random(100, 999)
-	return generatePatient(index, scenarioId, triage)
+	genOneCounter += 1
+	return generatePatient(1000 + genOneCounter, scenarioId, triage)
 end
 
 return PatientGenerator
