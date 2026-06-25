@@ -11,6 +11,17 @@ local returnRemote  = RS:WaitForChild("ReturnToMenu")
 
 local triggerRemote = RS:WaitForChild("TriggerCinematic")
 
+-- ── Multiplayer match state ──────────────────────────────────────────────────
+-- The Leaderboard panel is multiplayer-only. We track whether we're currently in
+-- an MP match so singleplayer / endless results can hide any leftover MP rows.
+local inMpMatch = false
+
+local startCutsceneRemote = RS:WaitForChild("StartCutscene")
+startCutsceneRemote.OnClientEvent:Connect(function()
+	-- SP and Endless always run through the cinematic; MP never does.
+	inMpMatch = false
+end)
+
 local triageColors = {
 	RED    = Color3.fromRGB(239, 68, 68),
 	YELLOW = Color3.fromRGB(234, 179, 8),
@@ -81,6 +92,13 @@ end
 sessionRemote.OnClientEvent:Connect(function(data)
 	local gui   = getGui()
 	local frame = gui:WaitForChild("SessionResultFrame")
+
+	-- Leaderboard is multiplayer-only. For singleplayer / endless, hide it so
+	-- leftover rows from a previous MP match don't linger on the results screen.
+	if not inMpMatch then
+		local lb = frame:FindFirstChild("Leaderboard", true)
+		if lb then lb.Visible = false end
+	end
 
 	local firstRow  = frame:WaitForChild("FirstRowContainer")
 	local secondRow = frame:WaitForChild("SecondRowContainer")
@@ -270,6 +288,7 @@ local updateVotesRemote = RS:WaitForChild("UpdateMPVotes", 5) or Instance.new("R
 
 -- [FIX]: Automatically hide the End Screen when the next round begins
 matchStartedRemote.OnClientEvent:Connect(function()
+	inMpMatch = true -- we're in an MP match → leaderboard panel is valid
 	local gui = getGui()
 	if gui then gui.Enabled = false end
 end)
@@ -294,6 +313,103 @@ updateVotesRemote.OnClientEvent:Connect(function(current, max)
 	end
 end)
 
+-- ── Leaderboard (multiplayer) helpers ───────────────────────────────────────
+local function loadLeaderboardAvatar(imageLabel, userName)
+	if not imageLabel then return end
+	task.spawn(function()
+		local ok, userId = pcall(function()
+			return Players:GetUserIdFromNameAsync(userName)
+		end)
+		if not ok or not userId then return end
+		local ok2, img = pcall(function()
+			return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+		end)
+		if ok2 and img and imageLabel.Parent then
+			imageLabel.Image = img
+		end
+	end)
+end
+
+-- Fills one cloned RowTemplate.
+-- Layout assumed (matches your template):
+--   RowTemplate
+--     ImageLabel            (avatar)
+--     Frame                 (text column: name on top, @handle below)
+--       LeaderboardLabel    (display name → top)
+--       LeaderboardLabel    (@username + status → bottom)
+--     LeaderboardLabel      (score, directly on the row)
+-- Labels inside the Frame are resolved by vertical position, so if your top/bottom
+-- come out swapped just flip labels[1] / labels[2] below.
+local function fillLeaderboardRow(row, pData, rank, localName)
+	row.Visible     = true
+	row.Name        = "LBRow_" .. rank
+	row.LayoutOrder = rank
+
+	local isYou      = (pData.name == localName)
+	local handle     = "@" .. (pData.name or "?")
+	local shownName  = pData.displayName or pData.name or "?"
+
+	-- Row tint by status.
+	if pData.isEliminated then
+		row.BackgroundColor3 = Color3.fromRGB(120, 38, 38)
+	elseif isYou then
+		row.BackgroundColor3 = Color3.fromRGB(40, 52, 70)
+	else
+		row.BackgroundColor3 = Color3.fromRGB(38, 38, 44)
+	end
+
+	-- Avatar.
+	loadLeaderboardAvatar(row:FindFirstChildWhichIsA("ImageLabel", true), pData.name)
+
+	-- Score = the TextLabel sitting directly on the row (not inside the text column).
+	local scoreLabel
+	for _, c in ipairs(row:GetChildren()) do
+		if c:IsA("TextLabel") then scoreLabel = c break end
+	end
+
+	-- Name + handle = the two labels inside the inner text-column Frame.
+	local nameLabel, handleLabel
+	local infoFrame = row:FindFirstChildWhichIsA("Frame")
+	if infoFrame then
+		local labels = {}
+		for _, c in ipairs(infoFrame:GetChildren()) do
+			if c:IsA("TextLabel") then table.insert(labels, c) end
+		end
+		table.sort(labels, function(a, b)
+			if a.LayoutOrder ~= b.LayoutOrder then return a.LayoutOrder < b.LayoutOrder end
+			return (a.Position.Y.Scale + a.Position.Y.Offset) < (b.Position.Y.Scale + b.Position.Y.Offset)
+		end)
+		nameLabel, handleLabel = labels[1], labels[2]
+	end
+
+	local medals = { "🥇", "🥈", "🥉" }
+	local prefix = medals[rank] or (rank .. ".")
+
+	if nameLabel then
+		nameLabel.Text       = prefix .. " " .. shownName .. (isYou and " (You)" or "")
+		nameLabel.TextColor3 = Color3.new(1, 1, 1)
+	end
+
+	if handleLabel then
+		-- Bottom line shows the @handle, with match status appended + colored.
+		if pData.isEliminated then
+			handleLabel.Text       = handle .. "  ·  Tersingkir"
+			handleLabel.TextColor3 = Color3.fromRGB(239, 68, 68)
+		elseif pData.isDraw then
+			handleLabel.Text       = handle .. "  ·  Seri"
+			handleLabel.TextColor3 = Color3.fromRGB(234, 179, 8)
+		else
+			handleLabel.Text       = handle .. "  ·  Aman"
+			handleLabel.TextColor3 = Color3.fromRGB(34, 197, 94)
+		end
+	end
+
+	if scoreLabel then
+		scoreLabel.Text       = tostring(pData.score)
+		scoreLabel.TextColor3 = Color3.new(1, 1, 1)
+	end
+end
+
 matchEndedRemote.OnClientEvent:Connect(function(leaderboardData, isFinal)
 	hasVotedLocally = false -- [FIX]: Reset vote state for the new round
 
@@ -303,12 +419,24 @@ matchEndedRemote.OnClientEvent:Connect(function(leaderboardData, isFinal)
 	local isLocallyEliminated = false
 
 	if leaderboardFrame then
-		local container = leaderboardFrame:FindFirstChildWhichIsA("ScrollingFrame") or leaderboardFrame
+		leaderboardFrame.Visible = true
 
+		local container   = leaderboardFrame:FindFirstChildWhichIsA("ScrollingFrame", true) or leaderboardFrame
+		local rowTemplate = container:FindFirstChild("RowTemplate", true)
+
+		-- Clear previous clones, but DO NOT destroy the template.
 		for _, child in ipairs(container:GetChildren()) do
-			if child:IsA("Frame") or child:IsA("TextLabel") then
+			if child:IsA("Frame") and child ~= rowTemplate then
 				child:Destroy()
+			elseif child:IsA("TextLabel") then
+				child:Destroy()  -- stray labels from old hand-built rows
 			end
+		end
+
+		if rowTemplate then
+			rowTemplate.Visible = false
+			container.AutomaticCanvasSize = Enum.AutomaticSize.Y
+			container.CanvasSize = UDim2.new(0, 0, 0, 0)
 		end
 
 		for i, pData in ipairs(leaderboardData) do
@@ -316,46 +444,41 @@ matchEndedRemote.OnClientEvent:Connect(function(leaderboardData, isFinal)
 				isLocallyEliminated = true
 			end
 
-			local row = Instance.new("Frame")
-			row.Size = UDim2.new(1, -10, 0, 40)
-			row.BackgroundColor3 = pData.isEliminated and Color3.fromRGB(150, 40, 40) or Color3.fromRGB(40, 40, 40)
-			row.Parent = container
-			Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+			if rowTemplate then
+				local row = rowTemplate:Clone()
+				row.Parent = container
+				fillLeaderboardRow(row, pData, i, player.Name)
+			else
+				-- Fallback if the template is missing.
+				local row = Instance.new("Frame")
+				row.Size = UDim2.new(1, -10, 0, 40)
+				row.BackgroundColor3 = pData.isEliminated and Color3.fromRGB(120, 38, 38) or Color3.fromRGB(40, 40, 40)
+				row.LayoutOrder = i
+				row.Parent = container
+				Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
 
-			local nameLabel = Instance.new("TextLabel")
-			nameLabel.Size = UDim2.new(0.7, 0, 1, 0)
-			nameLabel.Position = UDim2.new(0, 10, 0, 0)
-			nameLabel.BackgroundTransparency = 1
-			nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-			nameLabel.Font = Enum.Font.GothamBold
-			nameLabel.TextColor3 = Color3.new(1, 1, 1)
-			nameLabel.TextSize = 14
-			nameLabel.Text = pData.name .. (pData.name == player.Name and " (You)" or "")
-			nameLabel.Parent = row
+				local nameLabel = Instance.new("TextLabel")
+				nameLabel.Size = UDim2.new(0.7, 0, 1, 0)
+				nameLabel.Position = UDim2.new(0, 10, 0, 0)
+				nameLabel.BackgroundTransparency = 1
+				nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+				nameLabel.Font = Enum.Font.GothamBold
+				nameLabel.TextColor3 = Color3.new(1, 1, 1)
+				nameLabel.TextSize = 14
+				nameLabel.Text = i .. ". " .. (pData.displayName or pData.name)
+					.. (pData.name == player.Name and " (You)" or "")
+				nameLabel.Parent = row
 
-			local scoreLabel = Instance.new("TextLabel")
-			scoreLabel.Size = UDim2.new(0.3, -10, 1, 0)
-			scoreLabel.Position = UDim2.new(0.7, 0, 0, 0)
-			scoreLabel.BackgroundTransparency = 1
-			scoreLabel.TextXAlignment = Enum.TextXAlignment.Right
-			scoreLabel.Font = Enum.Font.GothamBold
-			scoreLabel.TextColor3 = Color3.new(1, 1, 1)
-			scoreLabel.TextSize = 14
-			scoreLabel.Text = tostring(pData.score)
-			scoreLabel.Parent = row
-
-			local pointsText = row:FindFirstChild("PointsText")
-			if pointsText then
-				if pData.isEliminated then
-					pointsText.Text = "ELIMINATED"
-					pointsText.TextColor3 = Color3.fromRGB(239, 68, 68)
-				elseif pData.isDraw then
-					pointsText.Text = "DRAW"
-					pointsText.TextColor3 = Color3.fromRGB(234, 179, 8)
-				else
-					pointsText.Text = "SAFE"
-					pointsText.TextColor3 = Color3.fromRGB(34, 197, 94)
-				end
+				local scoreLabel = Instance.new("TextLabel")
+				scoreLabel.Size = UDim2.new(0.3, -10, 1, 0)
+				scoreLabel.Position = UDim2.new(0.7, 0, 0, 0)
+				scoreLabel.BackgroundTransparency = 1
+				scoreLabel.TextXAlignment = Enum.TextXAlignment.Right
+				scoreLabel.Font = Enum.Font.GothamBold
+				scoreLabel.TextColor3 = Color3.new(1, 1, 1)
+				scoreLabel.TextSize = 14
+				scoreLabel.Text = tostring(pData.score)
+				scoreLabel.Parent = row
 			end
 		end
 	end

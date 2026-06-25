@@ -9,10 +9,10 @@ HospitalRegistry.Hospitals = {
 		entranceCFrame = CFrame.new(541.287, 11.036, 31.56),
 		spawnPosition = Vector3.new(528, 2.71, 54),
 		beds = {
-			{ position = Vector3.new(569.949, 5.157, 11.975),  yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(569.946, 5.157, -2.247), yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(569.946, 5.157, -15.764), yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(569.946, 5.157, -30.432), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(573.064, 5.157, 9.933),  yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(573.064, 5.157, -4.205), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(573.064, 5.157, -17.798), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(573.064, 5.157, -32.396), yRot = 180, pose = "Lying" },
 		},
 	},
 	{
@@ -22,10 +22,10 @@ HospitalRegistry.Hospitals = {
 		entranceCFrame = CFrame.new(-955.971, 11.036, 291.032),
 		spawnPosition = Vector3.new(-968, 2.71, 318),
 		beds = {
-			{ position = Vector3.new(-925.126, 5, 278.161), yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(-925.126, 5, 263.949), yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(-925.126, 5, 250.449), yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(-925.126, 5, 235.7111), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(-925.05, 5, 278.085), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(-925.05, 5, 264.006), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(-925.05, 5, 250.451), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(-925.05, 5, 235.837), yRot = 180, pose = "Lying" },
 		},
 	},
 	{
@@ -35,10 +35,10 @@ HospitalRegistry.Hospitals = {
 		entranceCFrame = CFrame.new(108.054, 9.555, -295.773),
 		spawnPosition = Vector3.new(96, 1.229, -269),
 		beds = {
-			{ position = Vector3.new(139.769, 3.5, -308.644), yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(139.769, 3.5, -322.813), yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(139.769, 3.5, -336.426), yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(139.769, 3.5, -351.093), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(138.192, 5, -303.883), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(138.192, 5, -318.114), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(138.192, 5, -331.915), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(138.192, 5, -346.322), yRot = 180, pose = "Lying" },
 		},
 	},
 	{
@@ -48,10 +48,10 @@ HospitalRegistry.Hospitals = {
 		entranceCFrame = CFrame.new(-580.189, 7.069, -265.737),
 		spawnPosition = Vector3.new(-679.34, 1.229, -264.85),
 		beds = {
-			{ position = Vector3.new(-634.289, 3.5, -308.662), yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(-634.289, 3.5, -322.813), yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(-634.289, 3.5, -336.383), yRot = 180, pose = "Lying" },
-			{ position = Vector3.new(-634.289, 3.5, -351.051), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(-635.43, 3.635, -308.644), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(-635.43, 3.635, -322.742), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(-635.43, 3.635, -336.422), yRot = 180, pose = "Lying" },
+			{ position = Vector3.new(-635.43, 3.635, -351.185), yRot = 180, pose = "Lying" },
 		},
 	},
 }

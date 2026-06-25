@@ -64,9 +64,22 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 					
 					local character = player.Character
 					if character and character:FindFirstChild("HumanoidRootPart") then
-						character.HumanoidRootPart.CFrame = CFrame.new(hospital.beds[i].position + Vector3.new(0, 3, 0))
-					end
+						local bed = hospital.beds[i]
 
+						-- 1. Create a CFrame using the bed's position and its specific Y-rotation
+						local bedCF = CFrame.new(bed.position) * CFrame.Angles(0, math.rad(bed.yRot), 0)
+
+						-- 2. Push the spawn position -12 studs away along the X-axis
+						--    and add 3 studs to the Y-axis so they don't clip into the floor.
+						local spawnPos = (bedCF * CFrame.new(-12, 0, 0)).Position + Vector3.new(0, 3, 0)
+
+						-- 3. Create a target to look at (keep the Y level so the player doesn't look up/down)
+						local lookTarget = Vector3.new(bed.position.X, spawnPos.Y, bed.position.Z)
+
+						-- 4. Apply the position and rotation
+						character.HumanoidRootPart.CFrame = CFrame.lookAt(spawnPos, lookTarget)
+					end
+					
 					matchStartedRemote:FireClient(player, ROUND_TIME)
 					startMpSpawns:Fire(player, hospital.id, i)
 				end
@@ -146,6 +159,7 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 			for i, entry in ipairs(leaderboard) do
 				table.insert(clientLeaderboard, {
 					name = entry.name,
+					displayName = entry.playerObj and entry.playerObj.DisplayName or entry.name,
 					score = entry.score,
 					isEliminated = (i == eliminatedIndex),
 					isDraw = isDraw
