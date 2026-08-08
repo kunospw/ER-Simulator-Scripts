@@ -449,6 +449,18 @@ cleanupMpSpawns.Event:Connect(function(player)
 end)
 
 -- ── IoT Add Patient ───────────────────────────────────────────────────────────
+
+-- [NEW]: Beri tahu TriageManager bahwa sesi scenario bertambah satu pasien,
+-- supaya target penyelesaian sesi ikut naik. Sengaja dipagari:
+-- - Endless tidak pernah menghabiskan patientQueues, jadi menaikkan target
+--   di sana hanya membuat angkanya menyesatkan.
+-- - Multiplayer tidak pernah sampai ke sini (sudah return lebih dulu).
+local function notifyScenarioPatientAdded(player)
+	if player:GetAttribute("InEndless") then return end
+	local ev = SS:FindFirstChild("ScenarioPatientAdded")
+	if ev then ev:Fire(player) end
+end
+
 local iotAddPatient = SS:FindFirstChild("IoTAddPatient")
 if not iotAddPatient then
 	iotAddPatient = Instance.new("BindableEvent")
@@ -498,12 +510,14 @@ iotAddPatient.Event:Connect(function(player)
 		player:SetAttribute("PatientsRemaining",
 			(player:GetAttribute("PatientsRemaining") or 0) + 1)
 		print("[IoT] Added patient to slot", emptySlot, "for", player.Name)
+		notifyScenarioPatientAdded(player)
 	else
 		if not patientQueues[player] then patientQueues[player] = {} end
 		table.insert(patientQueues[player], PatientGenerator.GenerateOne(getScenarioIdForPlayer(player)))
 		player:SetAttribute("PatientsRemaining",
 			(player:GetAttribute("PatientsRemaining") or 0) + 1)
 		print("[IoT] All slots full, queued patient for", player.Name)
+		notifyScenarioPatientAdded(player)
 	end
 end)
 

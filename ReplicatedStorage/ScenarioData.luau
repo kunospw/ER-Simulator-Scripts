@@ -152,6 +152,35 @@ ScenarioData.Scenarios = {
 			},
 		},
 	},
+	{
+		id = "earthquake_jababeka",
+		title = "Bencana Gempa Bumi 7,8 SR",
+		description = "Gempa berkekuatan 7,8 SR mengguncang Jababeka selama 5 menit. Banyak korban tertimpa bangunan yang runtuh dan mengalami kecelakaan kerja akibat mesin produksi yang mengalami malfungsi.",
+		mode = "Challenge Mode",
+		casualtyCount = 10,
+		estimatedTime = 300,
+		difficulty = "hard",
+		dialogue = {
+			{
+				speakerName = "dr. Radite NS, Sp.OK, M.K.K.",
+				speakerRole = "Kepala UGD — Klinik Utama Universitas Presiden",
+				text = "Lakukan segera triase menggunakan pendekatan START.",
+				dot = 1
+			},
+			{
+				speakerName = "dr. Ridwansyah",
+				speakerRole = "Dokter Umum — Klinik Utama Universitas Presiden",
+				text = "Baik, kami lakukan segera.",
+				dot = 2
+			},
+			{
+				speakerName = "dr. Radite NS, Sp.OK, M.K.K.",
+				speakerRole = "Kepala UGD — Klinik Utama Universitas Presiden",
+				text = "Ayo lekas bekerja!",
+				dot = 3
+			},
+		},
+	},
 }
 
 -- Patients are generated fresh each time GetScenario is called.

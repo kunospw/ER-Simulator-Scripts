@@ -12,6 +12,17 @@ local sessionRemote  = RS:WaitForChild("SessionComplete")
 local returnRemote   = RS:WaitForChild("ReturnToMenu")
 local patientCleared = SS:WaitForChild("PatientCleared")
 local sessionEvent   = ServerStorage:WaitForChild("PatientSessionStarted")
+
+-- [NEW]: Dipakai PatientSpawner untuk memberi tahu bahwa satu pasien tambahan
+-- masuk ke sesi scenario (lewat tombol Add Patient pada remote instruktur),
+-- supaya target penyelesaian sesi ikut bertambah.
+local scenarioPatientAdded = SS:FindFirstChild("ScenarioPatientAdded")
+if not scenarioPatientAdded then
+	scenarioPatientAdded = Instance.new("BindableEvent")
+	scenarioPatientAdded.Name = "ScenarioPatientAdded"
+	scenarioPatientAdded.Parent = SS
+end
+
 local HospitalRegistry = require(SS:WaitForChild("HospitalRegistry"))
 local DataStoreManager = require(SS:WaitForChild("DataStoreManager"))
 
@@ -63,6 +74,18 @@ sessionEvent.Event:Connect(function(player, count)
 	player:SetAttribute("BestStreak",        0)
 
 	print("[TriageManager] Session started —", player.Name, "—", count, "patients")
+end)
+
+-- [NEW]: Pasien tambahan dari remote instruktur menaikkan target penyelesaian
+-- sesi, supaya sesi tidak berakhir pada casualtyCount awal dan meninggalkan
+-- pasien tambahan yang belum sempat ditriase.
+-- Hanya berlaku untuk scenario mode: multiplayer dan endless tidak memakai
+-- pengecekan penyelesaian ini (lihat guard InMultiplayer / InEndless di bawah).
+scenarioPatientAdded.Event:Connect(function(player)
+	if not player or not player.Parent then return end
+	if scenarioPatientCount[player] == nil then return end
+	scenarioPatientCount[player] += 1
+	print("[TriageManager] Target naik jadi", scenarioPatientCount[player], "untuk", player.Name)
 end)
 
 

@@ -35,6 +35,56 @@ local function getGui()
 	return player.PlayerGui:WaitForChild("SessoinResult")
 end
 
+-- ── Button identity + connection management ─────────────────────────────────
+-- The two action buttons in ThirdRowContainer are now identified by stable Name
+-- (MainMenuButton / ActionButton) instead of their mutable .Text. ActionButton
+-- is the shared slot that becomes "Try Again" (SP), "Play Again" (Endless), or
+-- "Ready X/N" / "Waiting" (MP) depending on mode.
+--
+-- Every click connection we attach to these buttons is tracked here so we can
+-- disconnect ALL of them before wiring a new results screen. This kills the old
+-- bug where a leftover singleplayer "Try Again" connection stayed attached to the
+-- button that MP later reused as its vote button, sending players into SP.
+local activeButtonConns = {}
+
+local function clearButtonConns()
+	for _, c in ipairs(activeButtonConns) do
+		if typeof(c) == "RBXScriptConnection" and c.Connected then
+			c:Disconnect()
+		end
+	end
+	table.clear(activeButtonConns)
+end
+
+local function trackConn(conn)
+	table.insert(activeButtonConns, conn)
+	return conn
+end
+
+local function getButtons(frame)
+	local thirdRow = frame:WaitForChild("ThirdRowContainer")
+	local mainMenuBtn = thirdRow:FindFirstChild("MainMenuButton")
+	local actionBtn   = thirdRow:FindFirstChild("ActionButton")
+	return mainMenuBtn, actionBtn
+end
+
+-- Disconnect any stale connections and put both buttons back to a known baseline
+-- (visible, default text) before each results screen wires its own behavior.
+local function resetButtons(frame)
+	clearButtonConns()
+	local mainMenuBtn, actionBtn = getButtons(frame)
+	if mainMenuBtn then
+		mainMenuBtn.Visible = true
+		mainMenuBtn.Text     = "Main Menu"
+	end
+	if actionBtn then
+		actionBtn.Visible         = true
+		actionBtn.AutoButtonColor = true
+		actionBtn.Text            = "Try Again"
+	end
+	return mainMenuBtn, actionBtn
+end
+
 local function buildPerformanceRow(scrollFrame, rowTemplate, data, index)
 	local row   = rowTemplate:Clone()
 	row.Name    = "Row_" .. index
@@ -102,7 +152,6 @@ sessionRemote.OnClientEvent:Connect(function(data)
 
 	local firstRow  = frame:WaitForChild("FirstRowContainer")
 	local secondRow = frame:WaitForChild("SecondRowContainer")
-	local thirdRow  = frame:WaitForChild("ThirdRowContainer")
 
 	-- ── Score ──────────────────────────────────────────────────────────────────
 	local scoreUserContainer = firstRow:WaitForChild("ScoreUserContainer")
@@ -222,29 +271,30 @@ sessionRemote.OnClientEvent:Connect(function(data)
 	end
 
 	-- ── Buttons ────────────────────────────────────────────────────────────────
-	local mainMenuBtn, tryAgainBtn
-	for _, btn in ipairs(thirdRow:GetChildren()) do
-		if btn:IsA("TextButton") then
-			if btn.Text == "Main Menu" then
-				mainMenuBtn = btn
-			elseif btn.Text == "Try Again" then
-				tryAgainBtn = btn
-			end
-		end
+	-- In MP, TriageManager also fires SessionComplete (for the stats panel), but
+	-- button wiring is matchEndedRemote's job. Skip SP button setup so we don't
+	-- overwrite the vote button that matchEndedRemote will set up momentarily.
+	if inMpMatch then
+		gui.Enabled = true
+		return
 	end
 
+	-- Reset to baseline + drop any leftover connections from a previous screen,
+	-- then resolve the buttons by stable Name (not .Text).
+	local mainMenuBtn, tryAgainBtn = resetButtons(frame)
 
 	gui.Enabled = true
 
 	if mainMenuBtn then
 		local conn
 		conn = mainMenuBtn.MouseButton1Click:Connect(function()
-			conn:Disconnect()
+			if conn then conn:Disconnect() end
 			gui.Enabled = false
 			local mainMenuGui = player.PlayerGui:FindFirstChild("MainMenuGui")
 			if mainMenuGui then mainMenuGui.Enabled = true end
 			returnRemote:FireServer()
 		end)
+		trackConn(conn)
 	end
 
 	if tryAgainBtn then
@@ -255,7 +305,7 @@ sessionRemote.OnClientEvent:Connect(function(data)
 			tryAgainBtn.Text = "Play Again"
 			local conn
 			conn = tryAgainBtn.MouseButton1Click:Connect(function()
-				conn:Disconnect()
+				if conn then conn:Disconnect() end
 				gui.Enabled = false
 				player:SetAttribute("SkipMainMenu", true)
 				returnRemote:FireServer()
@@ -263,10 +313,11 @@ sessionRemote.OnClientEvent:Connect(function(data)
 				task.wait(0.5)
 				triggerRemote:FireServer("endless")
 			end)
+			trackConn(conn)
 		else
 			local conn
 			conn = tryAgainBtn.MouseButton1Click:Connect(function()
-				conn:Disconnect()
+				if conn then conn:Disconnect() end
 				gui.Enabled = false
 				local scenarioId = player.PlayerGui:FindFirstChild("ScenarioScreen")
 					and player.PlayerGui.ScenarioScreen:GetAttribute("ScenarioId")
@@ -277,6 +328,7 @@ sessionRemote.OnClientEvent:Connect(function(data)
 				task.wait(0.5)
 				triggerRemote:FireServer(scenarioId)
 			end)
+			trackConn(conn)
 		end
 	end
 end)
@@ -289,6 +341,7 @@ local updateVotesRemote = RS:WaitForChild("UpdateMPVotes", 5) or Instance.new("R
 -- [FIX]: Automatically hide the End Screen when the next round begins
 matchStartedRemote.OnClientEvent:Connect(function()
 	inMpMatch = true -- we're in an MP match → leaderboard panel is valid
+	clearButtonConns() -- old vote/menu connections from the previous round are now stale
 	local gui = getGui()
 	if gui then gui.Enabled = false end
 end)
@@ -297,18 +350,18 @@ end)
 updateVotesRemote.OnClientEvent:Connect(function(current, max)
 	local gui = getGui()
 	if not gui then return end
-	local thirdRow = gui.SessionResultFrame:FindFirstChild("ThirdRowContainer", true)
+	local frame = gui:FindFirstChild("SessionResultFrame")
+	if not frame then return end
+	local thirdRow = frame:FindFirstChild("ThirdRowContainer", true)
+	if not thirdRow then return end
 
-	if thirdRow then
-		for _, btn in ipairs(thirdRow:GetChildren()) do
-			-- [FIX]: Ignore what the text currently says. If it's a TextButton and it's NOT the Main Menu button, it is the Vote button.
-			if btn:IsA("TextButton") and not btn.Text:match("Menu") then
-				if hasVotedLocally then
-					btn.Text = "Waiting " .. current .. "/" .. max
-				else
-					btn.Text = "Ready " .. current .. "/" .. max
-				end
-			end
+	-- Resolve the vote button by stable Name instead of guessing from .Text.
+	local actionBtn = thirdRow:FindFirstChild("ActionButton")
+	if actionBtn then
+		if hasVotedLocally then
+			actionBtn.Text = "Waiting " .. current .. "/" .. max
+		else
+			actionBtn.Text = "Ready " .. current .. "/" .. max
 		end
 	end
 end)
@@ -491,44 +544,33 @@ matchEndedRemote.OnClientEvent:Connect(function(leaderboardData, isFinal)
 		end
 	end
 
-	-- Buttons Handle
-	local thirdRow = frame:WaitForChild("ThirdRowContainer")
-	local mainMenuBtn, tryAgainBtn
+	-- ── Buttons ────────────────────────────────────────────────────────────────
+	-- Reset to baseline + drop any leftover connections (including a stale SP
+	-- "Try Again" connection on ActionButton) before wiring MP behavior. Buttons
+	-- are resolved by stable Name, never by .Text.
+	local mainMenuBtn, actionBtn = resetButtons(frame)
 
-	for _, btn in ipairs(thirdRow:GetChildren()) do
-		if btn:IsA("TextButton") then
-			if btn.Text:match("Menu") then
-				mainMenuBtn = btn
-			elseif btn.Text:match("Try") or btn.Text:match("Ready") or btn.Text:match("Waiting") then
-				tryAgainBtn = btn
-			end
-		end
-	end
-
-	if tryAgainBtn then
+	if actionBtn then
 		if isLocallyEliminated or isFinal then
-			tryAgainBtn.Visible = false
+			actionBtn.Visible = false
 		else
-			tryAgainBtn.Visible = true
+			actionBtn.Visible = true
 			-- [FIX]: Show the correct survivor count right away
-			tryAgainBtn.Text = "Ready 0/" .. survivorCount
-			tryAgainBtn.AutoButtonColor = true
+			actionBtn.Text = "Ready 0/" .. survivorCount
+			actionBtn.AutoButtonColor = true
 
-			if _G.VoteConn then _G.VoteConn:Disconnect() end
-			_G.VoteConn = tryAgainBtn.MouseButton1Click:Connect(function()
+			trackConn(actionBtn.MouseButton1Click:Connect(function()
 				hasVotedLocally = true
-				tryAgainBtn.AutoButtonColor = false
+				actionBtn.AutoButtonColor = false
 
 				-- Set an optimistic temporary text; the server update will overwrite it instantly
-				tryAgainBtn.Text = "Waiting..." 
+				actionBtn.Text = "Waiting..."
 				RS:WaitForChild("VoteNextRound"):FireServer()
-			end)
+			end))
 		end
 	end
 
 	if mainMenuBtn then
-		if _G.MainMenuConn then _G.MainMenuConn:Disconnect() end
-
 		if not isLocallyEliminated and not isFinal then
 			mainMenuBtn.Visible = false
 		else
@@ -536,21 +578,20 @@ matchEndedRemote.OnClientEvent:Connect(function(leaderboardData, isFinal)
 			mainMenuBtn.Text = "Main Menu"
 		end
 
-		_G.MainMenuConn = mainMenuBtn.MouseButton1Click:Connect(function()
-			_G.MainMenuConn:Disconnect()
+		local conn
+		conn = mainMenuBtn.MouseButton1Click:Connect(function()
+			if conn then conn:Disconnect() end
 			gui.Enabled = false
-
-			if tryAgainBtn then 
-				tryAgainBtn.Visible = true 
-				tryAgainBtn.Text = "Try Again"
-			end
-			mainMenuBtn.Visible = true
 
 			local mainMenuGui = player.PlayerGui:FindFirstChild("MainMenuGui")
 			if mainMenuGui then mainMenuGui.Enabled = true end
 
-			returnRemote:FireServer(true)
+			-- No skipRespawn arg: the server respawns the player back to the menu
+			-- spawn. Passing true here skips that respawn and leaves the character
+			-- stranded in the match world, so the menu never properly opens.
+			returnRemote:FireServer()
 		end)
+		trackConn(conn)
 	end
 
 	gui.Enabled = true

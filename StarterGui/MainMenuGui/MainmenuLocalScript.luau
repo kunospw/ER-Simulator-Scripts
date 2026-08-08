@@ -60,20 +60,28 @@ local function getAvatarThumbnail(userId, imageLabel, size)
 		end
 	end)
 end
-local currentView = "scenario" -- "scenario" | "multiplayer"
+local currentView = "scenario" -- "scenario" | "multiplayer" | "credits"
 
 -- ── Menu Camera ───────────────────────────────────────────────────────────────
-local camera         = workspace.CurrentCamera
-local menuCameraPart = workspace:FindFirstChild("MenuCamera")
-
 local function startMenuCamera()
+	-- The MenuCamera part can stream in slightly after this script first runs, so
+	-- FindFirstChild would miss it and bail (that's why it only worked after a
+	-- respawn re-ran the script). WaitForChild waits for it instead. This runs in
+	-- a task.spawn, so waiting here doesn't block the rest of the menu.
+	local menuCameraPart = workspace:WaitForChild("MenuCamera", 10)
 	if not menuCameraPart then
-		warn("[MenuCamera] MenuCamera Part not found in Workspace!")
+		warn("[MenuCamera] MenuCamera Part not found in Workspace after waiting!")
 		return
 	end
 
 	local character = player.Character or player.CharacterAdded:Wait()
 	task.wait(1)
+
+	-- Read workspace.CurrentCamera live inside the loop so we always drive the
+	-- camera that's actually active (it can be replaced around the first spawn).
+	while not workspace.CurrentCamera do
+		task.wait()
+	end
 
 	_G.MenuCameraActive = true
 
@@ -82,16 +90,19 @@ local function startMenuCamera()
 
 	RunService:BindToRenderStep("MenuCamera", Enum.RenderPriority.Camera.Value + 1, function(dt)
 		if not _G.MenuCameraActive then return end
-		camera.CameraType = Enum.CameraType.Scriptable
+		local cam = workspace.CurrentCamera
+		if not cam then return end
+		cam.CameraType = Enum.CameraType.Scriptable
 		panAngle = panAngle + PAN_SPEED * dt
-		camera.CFrame = menuCameraPart.CFrame * CFrame.Angles(0, math.rad(panAngle), 0)
+		cam.CFrame = menuCameraPart.CFrame * CFrame.Angles(0, math.rad(panAngle), 0)
 	end)
 end
 
 local function stopMenuCamera()
 	_G.MenuCameraActive = false
 	RunService:UnbindFromRenderStep("MenuCamera")
-	camera.CameraType = Enum.CameraType.Custom
+	local cam = workspace.CurrentCamera
+	if cam then cam.CameraType = Enum.CameraType.Custom end
 end
 
 task.spawn(startMenuCamera)
@@ -372,7 +383,7 @@ local function showMultiplayerView()
 	clearList()
 	-- [FIX]: Change Left to Center to perfectly pad the 1, -16 widths
 	cardLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	
+
 	-- Check if player is currently in a lobby
 	local myLobby = nil
 	local myHostId = nil
@@ -669,6 +680,123 @@ local function showMultiplayerView()
 	end
 end
 
+-- ── Credits view ──────────────────────────────────────────────────────────────
+-- Reuses the same sliding panel as Scenario / Multiplayer; only the ScenarioList
+-- contents change. For now this is a stand-in for Settings (the game has no audio
+-- yet, so there's nothing to configure). Edit the `team` table and footer below.
+local function showCreditsView()
+	local headerLabel = Header:FindFirstChildWhichIsA("TextLabel")
+	if headerLabel then headerLabel.Text = "Settings" end
+
+	clearList()
+	cardLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+	-- Project title card
+	local titleCard = Instance.new("Frame")
+	titleCard.Size            = UDim2.new(1, -16, 0, 72)
+	titleCard.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+	titleCard.BorderSizePixel = 0
+	titleCard.Parent          = ScenarioList
+	Instance.new("UICorner", titleCard).CornerRadius = UDim.new(0, 8)
+
+	local accent = Instance.new("Frame")
+	accent.Size             = UDim2.new(0, 4, 1, -16)
+	accent.Position         = UDim2.new(0, 10, 0, 8)
+	accent.BackgroundColor3 = Color3.fromRGB(229, 57, 53)
+	accent.BorderSizePixel  = 0
+	accent.Parent           = titleCard
+	Instance.new("UICorner", accent).CornerRadius = UDim.new(0, 4)
+
+	local gameTitle = Instance.new("TextLabel")
+	gameTitle.Text                   = "ER Simulator"
+	gameTitle.TextSize               = 18
+	gameTitle.Font                   = Enum.Font.GothamBold
+	gameTitle.TextColor3             = Color3.new(1, 1, 1)
+	gameTitle.BackgroundTransparency = 1
+	gameTitle.Size                   = UDim2.new(1, -30, 0, 24)
+	gameTitle.Position               = UDim2.new(0, 24, 0, 14)
+	gameTitle.TextXAlignment         = Enum.TextXAlignment.Left
+	gameTitle.Parent                 = titleCard
+
+	local gameSub = Instance.new("TextLabel")
+	gameSub.Text                   = "START Triage Simulation"
+	gameSub.TextSize               = 11
+	gameSub.Font                   = Enum.Font.Gotham
+	gameSub.TextColor3             = Color3.fromRGB(160, 160, 160)
+	gameSub.BackgroundTransparency = 1
+	gameSub.Size                   = UDim2.new(1, -30, 0, 16)
+	gameSub.Position               = UDim2.new(0, 24, 0, 42)
+	gameSub.TextXAlignment         = Enum.TextXAlignment.Left
+	gameSub.Parent                 = titleCard
+
+	-- Section label
+	local sectionLabel = Instance.new("TextLabel")
+	sectionLabel.Text                   = "DEVELOPED BY"
+	sectionLabel.TextSize               = 10
+	sectionLabel.Font                   = Enum.Font.GothamBold
+	sectionLabel.TextColor3             = Color3.fromRGB(120, 120, 120)
+	sectionLabel.BackgroundTransparency = 1
+	sectionLabel.Size                   = UDim2.new(1, -16, 0, 20)
+	sectionLabel.TextXAlignment         = Enum.TextXAlignment.Left
+	sectionLabel.Parent                 = ScenarioList
+
+	-- ── Edit team members here ───────────────────────────────────────────────
+	local team = {
+		{ name = "Dyah Puspo Rini", role = "Game Design · UI · Environment" },
+		{ name = "Denzel Huang",          role = "Multiplayer · Scripting" },
+		{ name = "NAjla Aliya Syauqina",           role = "IoT Hardware · Endless" },
+	}
+
+	for _, member in ipairs(team) do
+		local pCard = Instance.new("Frame")
+		pCard.Size            = UDim2.new(1, -16, 0, 52)
+		pCard.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+		pCard.BorderSizePixel = 0
+		pCard.Parent          = ScenarioList
+		Instance.new("UICorner", pCard).CornerRadius = UDim.new(0, 8)
+
+		local nameLabel = Instance.new("TextLabel")
+		nameLabel.Text                   = member.name
+		nameLabel.TextSize               = 13
+		nameLabel.Font                   = Enum.Font.GothamBold
+		nameLabel.TextColor3             = Color3.new(1, 1, 1)
+		nameLabel.BackgroundTransparency = 1
+		nameLabel.Size                   = UDim2.new(1, -24, 0, 20)
+		nameLabel.Position               = UDim2.new(0, 12, 0, 8)
+		nameLabel.TextXAlignment         = Enum.TextXAlignment.Left
+		nameLabel.Parent                 = pCard
+
+		local roleLabel = Instance.new("TextLabel")
+		roleLabel.Text                   = member.role
+		roleLabel.TextSize               = 11
+		roleLabel.Font                   = Enum.Font.Gotham
+		roleLabel.TextColor3             = Color3.fromRGB(150, 150, 150)
+		roleLabel.BackgroundTransparency = 1
+		roleLabel.Size                   = UDim2.new(1, -24, 0, 16)
+		roleLabel.Position               = UDim2.new(0, 12, 0, 28)
+		roleLabel.TextXAlignment         = Enum.TextXAlignment.Left
+		roleLabel.Parent                 = pCard
+	end
+
+	-- Footer card
+	local footer = Instance.new("Frame")
+	footer.Size            = UDim2.new(1, -16, 0, 44)
+	footer.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+	footer.BorderSizePixel = 0
+	footer.Parent          = ScenarioList
+	Instance.new("UICorner", footer).CornerRadius = UDim.new(0, 8)
+
+	local footerLabel = Instance.new("TextLabel")
+	footerLabel.Text                   = "President University · PKM-KC"
+	footerLabel.TextSize               = 11
+	footerLabel.Font                   = Enum.Font.Gotham
+	footerLabel.TextColor3             = Color3.fromRGB(140, 140, 140)
+	footerLabel.BackgroundTransparency = 1
+	footerLabel.Size                   = UDim2.new(1, 0, 1, 0)
+	footerLabel.TextXAlignment         = Enum.TextXAlignment.Center
+	footerLabel.Parent                 = footer
+end
+
 UpdateLobbies.OnClientEvent:Connect(function(lobbiesDict)
 	cachedLobbies = lobbiesDict
 	if currentView == "multiplayer" then
@@ -705,6 +833,12 @@ end)
 MultiplayerButton.MouseButton1Click:Connect(function()
 	currentView = "multiplayer"
 	showMultiplayerView()
+	slideToScenarios()
+end)
+
+SettingsButton.MouseButton1Click:Connect(function()
+	currentView = "credits"
+	showCreditsView()
 	slideToScenarios()
 end)
 

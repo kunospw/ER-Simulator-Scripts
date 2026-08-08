@@ -634,6 +634,151 @@ ConditionPool.Conditions = {
 			},
 		},
 	},
+
+	-- ══════════════════════════════════════════════════════════════════════════
+	-- EARTHQUAKE JABABEKA 7,8 SR
+	-- Sumber: Formulir Skenario ER Simulator — dr. Radite NS, Sp.OK, M.K.K.
+	-- ══════════════════════════════════════════════════════════════════════════
+	earthquake_jababeka = {
+
+		BLACK = {
+			{
+				name        = "Luka Bakar Elektrik Grade 2 Luas 35% — Aritmia Fatal",
+				complaint   = "Tersengat listrik dari panel mesin produksi yang rusak setelah gempa. Ditemukan tidak bernapas dan tetap tidak bernapas setelah jalan napas dibuka.",
+				rr          = { 0, 0 },
+				nadi        = { 0, 0 },
+				gcs         = { 3, 3 },
+				crt         = "Terlambat",
+				spo2        = { 0, 0 },
+				td_sys      = { 0, 0 },
+				canWalk     = false,
+				deteriorationRate = 0,
+			},
+		},
+
+		RED = {
+			{
+				name        = "Tension Pneumothorax",
+				complaint   = "Tertimpa reruntuhan ringan dan mengalami benturan keras pada dada kanan. Tampak sesak berat, napas cepat, gelisah, bibir kebiruan.",
+				rr          = { 34, 42 },
+				nadi        = { 124, 142 },
+				gcs         = { 14, 15 },
+				crt         = "Terlambat",
+				spo2        = { 82, 89 },
+				td_sys      = { 82, 96 },
+				canWalk     = false,
+				-- RR > 30 dan CRT Terlambat → RED
+				deteriorationRate = 0.8,
+			},
+			{
+				name        = "Suspek Fraktur Basis Cranii",
+				complaint   = "Ditemukan setelah tertimpa material bangunan pada area kepala. Tampak bingung, terdapat perdarahan dari telinga, dan mengeluh nyeri kepala hebat.",
+				rr          = { 18, 24 },
+				nadi        = { 96, 112 },
+				gcs         = { 11, 12 },
+				crt         = "Normal",
+				spo2        = { 94, 98 },
+				td_sys      = { 112, 132 },
+				canWalk     = false,
+				-- GCS < 13 → RED
+				deteriorationRate = 0.5,
+			},
+			{
+				name        = "Epidural Hemorrhage",
+				complaint   = "Sempat sadar setelah kepala terbentur mesin produksi, lalu menjadi mengantuk dan sulit diajak bicara. Tampak luka memar pada regio temporal.",
+				rr          = { 16, 22 },
+				nadi        = { 52, 64 },
+				gcs         = { 10, 12 },
+				crt         = "Normal",
+				spo2        = { 94, 98 },
+				td_sys      = { 150, 176 },
+				canWalk     = false,
+				-- GCS < 13 → RED
+				deteriorationRate = 0.8,
+			},
+			{
+				name        = "Open Fracture Cruris Dextra",
+				complaint   = "Tertimpa material besi pada tungkai kanan. Tampak tulang keluar, perdarahan aktif, pasien pucat dan mengeluh nyeri hebat.",
+				rr          = { 24, 30 },
+				nadi        = { 122, 138 },
+				gcs         = { 14, 15 },
+				crt         = "Terlambat",
+				spo2        = { 94, 98 },
+				td_sys      = { 84, 100 },
+				canWalk     = false,
+				-- CRT Terlambat → RED
+				deteriorationRate = 0.8,
+			},
+			{
+				name        = "Closed Fracture Collum Femur Dextra dengan Subdural Hemorrhage",
+				complaint   = "Jatuh dari tangga saat evakuasi dan tidak dapat menggerakkan tungkai kanan karena nyeri panggul hebat. Tampak mengantuk, menjawab lambat, dan memiliki riwayat benturan kepala.",
+				rr          = { 20, 28 },
+				nadi        = { 104, 122 },
+				gcs         = { 8, 11 },
+				crt         = "Normal",
+				spo2        = { 93, 97 },
+				td_sys      = { 138, 160 },
+				canWalk     = false,
+				-- GCS < 13 → RED
+				deteriorationRate = 0.8,
+			},
+			{
+				name        = "Fraktur Phalanx II–III Proximal dengan Flail Chest",
+				complaint   = "Tertimpa rak logam dan mengalami nyeri dada hebat serta deformitas pada jari tangan. Dinding dada tampak bergerak tidak simetris, pasien sesak, dan sulit berbicara panjang.",
+				rr          = { 32, 40 },
+				nadi        = { 116, 134 },
+				gcs         = { 14, 15 },
+				crt         = "Normal",
+				spo2        = { 86, 92 },
+				td_sys      = { 96, 116 },
+				canWalk     = false,
+				-- RR > 30 → RED
+				deteriorationRate = 0.8,
+			},
+		},
+
+		YELLOW = {
+			{
+				name        = "Fraktur Kompresi Os Vertebra Torakal",
+				complaint   = "Tertimpa balok ringan di punggung dan mengeluh nyeri hebat pada punggung bagian tengah. Sadar penuh, tetapi tidak mampu berdiri karena nyeri.",
+				rr          = { 18, 24 },
+				nadi        = { 92, 108 },
+				gcs         = { 15, 15 },
+				crt         = "Normal",
+				spo2        = { 96, 99 },
+				td_sys      = { 118, 138 },
+				canWalk     = false,
+				deteriorationRate = 0.2,
+			},
+			{
+				name        = "Fraktur Vertebra dengan Hipertensi Emergensi",
+				complaint   = "Tertimpa runtuhan plafon dan mengeluh nyeri punggung berat serta sakit kepala hebat. Sadar penuh, tidak sesak, tetapi tidak bisa berdiri karena nyeri tulang belakang.",
+				rr          = { 18, 24 },
+				nadi        = { 96, 112 },
+				gcs         = { 14, 15 },
+				crt         = "Normal",
+				spo2        = { 95, 98 },
+				td_sys      = { 200, 226 },
+				canWalk     = false,
+				deteriorationRate = 0.5,
+			},
+		},
+
+		GREEN = {
+			{
+				name        = "Vulnus Laceratum Regio Frontal",
+				complaint   = "Berjalan sendiri ke area triase dengan luka robek pada dahi akibat pecahan kaca. Sadar penuh, perdarahan ringan, dan tidak tampak sesak.",
+				rr          = { 16, 22 },
+				nadi        = { 78, 96 },
+				gcs         = { 15, 15 },
+				crt         = "Normal",
+				spo2        = { 97, 99 },
+				td_sys      = { 110, 130 },
+				canWalk     = true,
+				deteriorationRate = 0.0,
+			},
+		},
+	},
 }
 
 -- ── Helpers ────────────────────────────────────────────────────────────────────

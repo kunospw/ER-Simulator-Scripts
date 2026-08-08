@@ -11,6 +11,16 @@ local StarterGui   = game:GetService("StarterGui")
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
+-- ── Cinematic tunables ────────────────────────────────────────────────────────
+-- FOLLOW_TIME: how long the camera tracks the stretcher as it's wheeled in.
+-- Keep this roughly equal to the server's stretcher-move DURATION (currently 4s
+-- in ScenarioManager). Bump it slightly if the shot cuts before the stretcher
+-- fully settles.
+local CINEMATIC_FOLLOW_TIME = 4
+-- LOOK_OFFSET: nudges the aim point up off the stretcher base so the camera
+-- frames the patient's body instead of the floor. Tune the Y after seeing it.
+local CINEMATIC_LOOK_OFFSET = Vector3.new(0, 1.5, 0)
+
 local function safeGet(parent, name, timeout)
 	timeout = timeout or 10
 	local obj = parent:WaitForChild(name, timeout)
@@ -93,13 +103,6 @@ local function fadeFromBlack(duration)
 	t:Play(); t.Completed:Wait()
 end
 
-local function tweenCamera(targetCF, duration)
-	local t = TweenService:Create(camera,
-		TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-		{ CFrame = targetCF })
-	t:Play(); t.Completed:Wait()
-end
-
 -- ── Free-look state ───────────────────────────────────────────────────────────
 local yaw, pitch        = 0, 0
 local sensitivity       = 0.3
@@ -154,7 +157,7 @@ startRemote.OnClientEvent:Connect(function(scenarioId)
 		warn("[CinematicController] Hospital folder not found: Hospital" .. assignedHospitalId)
 		return
 	end
-	
+
 	local toShow = {"StretcherCinematic", "Dummy", "Worker 1", "Worker 2"}
 	for _, name in ipairs(toShow) do
 		local obj = hospitalFolder:FindFirstChild(name)
@@ -176,10 +179,9 @@ startRemote.OnClientEvent:Connect(function(scenarioId)
 			end
 		end
 	end
-	
+
 	local cinematicStart = hospitalFolder:FindFirstChild("CinematicCameraStart")
-	local ambulance      = hospitalFolder:FindFirstChild("AmbulanceMain")
-	local entrancePoint  = hospitalFolder:FindFirstChild("EntrancePoint")
+	local stretcher      = hospitalFolder:FindFirstChild("StretcherCinematic")
 
 	local character = player.Character or player.CharacterAdded:Wait()
 	local humanoid  = character:WaitForChild("Humanoid")
@@ -193,27 +195,32 @@ startRemote.OnClientEvent:Connect(function(scenarioId)
 	camera.CameraType    = Enum.CameraType.Scriptable
 	camera.CameraSubject = nil
 
-	-- SHOT 1: Look at ambulance
-	if cinematicStart and ambulance then
-		local ambulancePos = ambulance:GetPivot().Position
-		local shot1 = CFrame.new(cinematicStart.Position, ambulancePos + Vector3.new(0, 1, 0))
-		camera.CFrame = shot1
+	-- Camera holds at CinematicCameraStart and keeps re-aiming at the stretcher
+	-- as it's wheeled straight in toward the camera.
+	if cinematicStart and stretcher then
+		local camPos = cinematicStart.Position
 
+		local function stretcherTarget()
+			local pos = stretcher:IsA("Model")
+				and stretcher:GetPivot().Position
+				or  stretcher.Position
+			return pos + CINEMATIC_LOOK_OFFSET
+		end
+
+		-- Snap to the tracked shot, then fade in on it.
+		camera.CFrame = CFrame.lookAt(camPos, stretcherTarget())
 		fadeToBlack(0.6)
 		task.wait(0.3)
 		fadeFromBlack(0.8)
 
-		-- SHOT 2: Pan toward ER entrance
-		if entrancePoint then
-			local shot2 = CFrame.new(
-				cinematicStart.Position + Vector3.new(0, 2, -6),
-				entrancePoint.Position + Vector3.new(0, 2, 0)
-			)
-			tweenCamera(shot2, 2.5)
-			task.wait(1)
-		end
+		-- Hold the position, follow the stretcher for the move-in window.
+		local followConn = RunService.RenderStepped:Connect(function()
+			camera.CFrame = CFrame.lookAt(camPos, stretcherTarget())
+		end)
+		task.wait(CINEMATIC_FOLLOW_TIME)
+		followConn:Disconnect()
 	else
-		warn("[CinematicController] CinematicCameraStart or AmbulanceMain missing in Hospital" .. assignedHospitalId)
+		warn("[CinematicController] CinematicCameraStart or StretcherCinematic missing in Hospital" .. assignedHospitalId)
 		task.wait(0.5)
 	end
 
