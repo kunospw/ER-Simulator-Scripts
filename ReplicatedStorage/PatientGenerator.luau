@@ -304,12 +304,38 @@ local genOneCounter = 0
 
 -- Generate a single random patient (used by IoT ADD_PATIENT and multiplayer)
 -- This replaces the old `generateRandomPatient()` in PatientSpawner
-function PatientGenerator.GenerateOne(scenarioId)
-	scenarioId = scenarioId or "food_poisoning"
-	-- Weighted random: 30% RED, 50% YELLOW, 20% GREEN
+local standardScenarios = {
+	"food_poisoning",
+	"industrial_explosion",
+	"mixed_acute",
+	"traffic_accident",
+	"earthquake_collapse",
+	"earthquake_jababeka"
+}
+
+-- Generate a single random patient from any allowed scenario pool
+function PatientGenerator.GenerateOne(scenariosInput)
+	local allowedList = {}
+
+	if type(scenariosInput) == "table" and #scenariosInput > 0 then
+		allowedList = scenariosInput
+	elseif type(scenariosInput) == "string" then
+		table.insert(allowedList, scenariosInput)
+	else
+		-- Default fallback: all standard scenarios + ai_generated
+		allowedList = table.clone(standardScenarios)
+		table.insert(allowedList, "ai_generated")
+	end
+
+	-- Pick a random scenario from the allowed pools for this specific patient
+	local scenarioId = allowedList[math.random(#allowedList)]
+
+	-- Category distribution weights: 5% BLACK, 30% RED, 45% YELLOW, 20% GREEN
 	local roll = math.random()
 	local triage
-	if roll < 0.30 then
+	if roll < 0.05 then
+		triage = "BLACK"
+	elseif roll < 0.35 then
 		triage = "RED"
 	elseif roll < 0.80 then
 		triage = "YELLOW"
@@ -317,7 +343,7 @@ function PatientGenerator.GenerateOne(scenarioId)
 		triage = "GREEN"
 	end
 
-	-- Fallback if no condition found for that triage
+	-- Fallback if the chosen scenario pool lacks conditions for that category
 	local condition = ConditionPool.GetRandom(scenarioId, triage)
 	if not condition then
 		triage = "YELLOW"

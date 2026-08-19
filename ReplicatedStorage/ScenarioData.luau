@@ -181,6 +181,35 @@ ScenarioData.Scenarios = {
 			},
 		},
 	},
+	{
+		id = "ai_generated",
+		title = "AI Generated Extras",
+		description = "Skenario acak berisi 48 kondisi medis sintetis buatan AI. Uji kemampuan triase START Anda pada kombinasi vital pasien yang bervariasi.",
+		mode = "Custom Mode",
+		casualtyCount = 12,
+		estimatedTime = 600,
+		difficulty = "hard",
+		dialogue = {
+			{
+				speakerName = "Sistem AI Triase",
+				speakerRole = "Asisten Virtual UGD",
+				text = "Skenario sintetis AI diaktifkan. Data pasien akan diambil secara acak dari database AI.",
+				dot = 1
+			},
+			{
+				speakerName = "Sistem AI Triase",
+				speakerRole = "Asisten Virtual UGD",
+				text = "Variasi kasus mencakup trauma berat, syok hipovolemik, obstruksi saluran napas, hingga fraktur ringan.",
+				dot = 2
+			},
+			{
+				speakerName = "Sistem AI Triase",
+				speakerRole = "Asisten Virtual UGD",
+				text = "Gunakan algoritma START untuk memprioritaskan penanganan dengan cepat dan akurat.",
+				dot = 3
+			},
+		},
+	},
 }
 
 -- Patients are generated fresh each time GetScenario is called.

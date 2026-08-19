@@ -51,6 +51,26 @@ end)
 -- Fires the SessionResult stats normally when a multiplayer round ends
 endMpRound.Event:Connect(function(player)
 	local totalAnswered = (player:GetAttribute("CorrectCount") or 0) + (player:GetAttribute("WrongCount") or 0)
+	local accuracy = totalAnswered > 0
+		and ((player:GetAttribute("CorrectCount") or 0) / totalAnswered * 100) or 0
+
+	-- [NEW]: Multiplayer sebelumnya hanya mengirim hasil ke klien tanpa menyimpan
+	-- apa pun. Sesi ronde sekarang ikut tercatat supaya muncul di panel History.
+	task.spawn(function()
+		DataStoreManager.SaveSession(player, {
+			scenarioId     = player:GetAttribute("CurrentScenarioId") or "multiplayer",
+			gameMode       = "Multiplayer",
+			mode           = "Competitive",
+			totalScore     = player:GetAttribute("Score"),
+			accuracy       = accuracy,
+			correctCount   = player:GetAttribute("CorrectCount"),
+			wrongCount     = player:GetAttribute("WrongCount"),
+			totalPatients  = totalAnswered,
+			bestStreak     = player:GetAttribute("BestStreak") or 0,
+			allSubmissions = allSubmissions[player] or {},
+		})
+	end)
+
 	sessionRemote:FireClient(player, {
 		totalScore     = player:GetAttribute("Score"),
 		correctCount   = player:GetAttribute("CorrectCount"),
@@ -103,6 +123,41 @@ Players.PlayerAdded:Connect(function(player)
 	DataStoreManager.InitPlayer(player)
 
 end)
+
+-- [NEW]: RequestHistory — dipanggil dari MainmenuLocalScript saat panel History
+-- dibuka. RemoteFunction karena main menu butuh hasilnya langsung (bukan event
+-- searah), dan history-nya kecil (maks 50 entri ringkasan) jadi aman lewat Invoke.
+local requestHistory = RS:FindFirstChild("RequestHistory")
+if not requestHistory then
+	requestHistory = Instance.new("RemoteFunction")
+	requestHistory.Name = "RequestHistory"
+	requestHistory.Parent = RS
+end
+
+requestHistory.OnServerInvoke = function(player)
+	return DataStoreManager.GetHistory(player)
+end
+
+-- [NEW]: RequestSessionDetail — dipanggil saat player klik salah satu card di
+-- panel History untuk melihat breakdown per pasien (dari Session Result screen).
+local requestSessionDetail = RS:FindFirstChild("RequestSessionDetail")
+if not requestSessionDetail then
+	requestSessionDetail = Instance.new("RemoteFunction")
+	requestSessionDetail.Name = "RequestSessionDetail"
+	requestSessionDetail.Parent = RS
+end
+
+requestSessionDetail.OnServerInvoke = function(player, sessionKey)
+	-- Guard: sessionKey harus string dan harus punya prefix userId milik pemanggil,
+	-- supaya satu player tidak bisa nebak-nebak key player lain untuk baca datanya.
+	if type(sessionKey) ~= "string" then return nil end
+	local expectedPrefix = "session_" .. player.UserId .. "_"
+	if sessionKey:sub(1, #expectedPrefix) ~= expectedPrefix then
+		warn("[TriageManager] RequestSessionDetail: sessionKey mismatch for", player.Name)
+		return nil
+	end
+	return DataStoreManager.GetSession(sessionKey)
+end
 
 Players.PlayerRemoving:Connect(function(player)
 	triaged[player]              = nil
@@ -270,12 +325,14 @@ submitRemote.OnServerEvent:Connect(function(player, patientId, chosenTriage)
 			task.spawn(function()
 				DataStoreManager.SaveSession(player, {
 					scenarioId     = player:GetAttribute("CurrentScenarioId") or "",
+					gameMode       = "Scenario",
 					mode           = scenario and scenario.mode or "",
 					totalScore     = player:GetAttribute("Score"),
 					accuracy       = accuracy,
 					correctCount   = player:GetAttribute("CorrectCount"),
 					wrongCount     = player:GetAttribute("WrongCount"),
 					totalPatients  = totalPatients,
+					bestStreak     = player:GetAttribute("BestStreak") or 0,
 					allSubmissions = allSubmissions[player],
 				})
 			end)
@@ -312,6 +369,7 @@ endlessEndRemote.OnServerEvent:Connect(function(player)
 		DataStoreManager.SaveSession(player, {
 			scenarioId     = "endless",
 			mode           = "Endless Mode",
+			gameMode = "Endless",
 			totalScore     = player:GetAttribute("Score"),
 			accuracy       = accuracy,
 			correctCount   = player:GetAttribute("CorrectCount"),

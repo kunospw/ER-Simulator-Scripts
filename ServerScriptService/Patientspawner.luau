@@ -137,6 +137,16 @@ end
 -- ── Deterioration loop ────────────────────────────────────────────────────────
 -- Called once per patient after spawn. Runs until triaged or destroyed.
 -- interval = 60 / deteriorationRate (faster rate = shorter interval)
+-- ── Deterioration loop ────────────────────────────────────────────────────────
+-- Called once per patient after spawn. Runs until triaged or destroyed.
+-- interval = 60 / deteriorationRate (faster rate = shorter interval)
+--
+-- VITAL SIGNS GLOSSARY (used by the START algorithm):
+--   RR  (Respiratory Rate)      breaths per minute. Normal 12-20. RR > 30 → RED, RR = 0 → BLACK
+--   GCS (Glasgow Coma Scale)    level of consciousness, 15 = fully alert, 3 = lowest. GCS < 13 → RED
+--   CRT (Capillary Refill Time) how fast blood returns to the nail bed after pressure.
+--                               "Normal" (≤2s) or "Terlambat" (>2s). Terlambat → RED
+--   HR  (Heart Rate)            beats per minute. Displayed only, not used by START.
 local function startDeteriorationLoop(npc, owner, scenarioMode)
 	local rate = npc:GetAttribute("DeteriorationRate") or 0
 	if rate <= 0 then return end                          -- GREEN / BLACK: skip
@@ -157,6 +167,7 @@ local function startDeteriorationLoop(npc, owner, scenarioMode)
 			if npc:GetAttribute("Triaged") then break end
 
 			-- Read current vitals from attributes
+			-- Breathing is stored as text ("22x/mnt") for the UI, so extract the number
 			local rrStr = npc:GetAttribute("Breathing") or "0x/mnt"
 			local rr    = tonumber(rrStr:match("%d+")) or 0
 			local gcs   = npc:GetAttribute("GCS") or 15
@@ -164,29 +175,32 @@ local function startDeteriorationLoop(npc, owner, scenarioMode)
 			local hr    = npc:GetAttribute("HR") or 80
 			local crt   = (perf == "Terlambat") and "Terlambat" or "Normal"
 
-			-- Already BLACK: stop
+			-- Already BLACK: nothing left to degrade
 			if rr == 0 and gcs <= 3 then break end
 
 			-- Degrade vitals
-			-- RR: +1 to +3 per tick
+			-- RR: +1 to +3 per tick. Capped at 40 — beyond that isn't physiologically realistic
 			local rrDelta = math.random(1, 3)
 			rr = math.min(rr + rrDelta, 40)
 
-			-- GCS: -1 per tick (sometimes -2 for high rate patients)
+			-- GCS: -1 per tick (up to -2 for unstable patients, rate >= 0.8).
+			-- Floored at 3 because that's the minimum on the Glasgow scale
 			local gcsDelta = rate >= 0.8 and math.random(1, 2) or 1
 			gcs = math.max(gcs - gcsDelta, 3)
 
-			-- HR: +3 to +8 per tick
+			-- HR: +3 to +8 per tick, capped at 160
 			hr = math.min(hr + math.random(3, 8), 160)
 
-			-- CRT: becomes Terlambat when GCS drops below 12 or RR > 28
+			-- CRT: becomes Terlambat when GCS drops below 12 or RR > 28,
+			-- reflecting that poor perfusion accompanies deteriorating consciousness/breathing
 			if gcs < 12 or rr > 28 then
 				crt = "Terlambat"
 			end
 
-			-- Re-run START
+			-- Re-run START on the new values — the correct triage category can change,
+			-- so a YELLOW patient may become RED if the player takes too long
 			local newTriage = applySTART(rr, crt, gcs)
-
+			
 			-- Update NPC attributes
 			npc:SetAttribute("Breathing", tostring(rr) .. "x/mnt")
 			npc:SetAttribute("GCS",       gcs)

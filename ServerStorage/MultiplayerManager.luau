@@ -36,10 +36,24 @@ if not iotAdjustMP then
 	iotAdjustMP.Parent = SS
 end
 
--- [FIX]: Reverted to standard parameters
-function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
+function MultiplayerManager.StartMatch(allPlayers, hostPlayer, includeAiContent)
 	local hospital = HospitalRegistry.AssignMulti(allPlayers)
 	if not hospital then return end
+
+	-- Build list of allowed scenario pools for this match
+	local allowedScenarios = {
+		"food_poisoning",
+		"industrial_explosion",
+		"mixed_acute",
+		"traffic_accident",
+		"earthquake_collapse",
+		"earthquake_jababeka"
+	}
+
+	-- Default is true; include AI Generated pool if enabled
+	if includeAiContent == nil or includeAiContent == true then
+		table.insert(allowedScenarios, "ai_generated")
+	end
 
 	local activePlayers = {}
 	for _, p in ipairs(allPlayers) do table.insert(activePlayers, p) end
@@ -50,41 +64,33 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 		while #activePlayers > 1 do
 			print("[Multiplayer] Starting Round " .. roundNum)
 
-			-- 1. Setup Round
 			for i, player in ipairs(activePlayers) do
 				if player and player.Parent then
 					player:SetAttribute("InMultiplayer", true)
 					player:SetAttribute("AssignedHospitalId", hospital.id)
 					player:SetAttribute("AssignedBedIndex", i)
-
-					-- [FIX]: Apply a generic mode text for the UI
 					player:SetAttribute("CurrentScenarioMode", "Multiplayer Mode")
 
 					startMpRound:Fire(player)
-					
+
 					local character = player.Character
 					if character and character:FindFirstChild("HumanoidRootPart") then
 						local bed = hospital.beds[i]
-
-						-- 1. Create a CFrame using the bed's position and its specific Y-rotation
 						local bedCF = CFrame.new(bed.position) * CFrame.Angles(0, math.rad(bed.yRot), 0)
-
-						-- 2. Push the spawn position -12 studs away along the X-axis
-						--    and add 3 studs to the Y-axis so they don't clip into the floor.
 						local spawnPos = (bedCF * CFrame.new(-12, 0, 0)).Position + Vector3.new(0, 3, 0)
-
-						-- 3. Create a target to look at (keep the Y level so the player doesn't look up/down)
 						local lookTarget = Vector3.new(bed.position.X, spawnPos.Y, bed.position.Z)
 
-						-- 4. Apply the position and rotation
 						character.HumanoidRootPart.CFrame = CFrame.lookAt(spawnPos, lookTarget)
 					end
-					
+
 					matchStartedRemote:FireClient(player, ROUND_TIME)
-					startMpSpawns:Fire(player, hospital.id, i)
+
+					-- Pass allowedScenarios list to the spawner script
+					startMpSpawns:Fire(player, hospital.id, i, allowedScenarios)
 				end
 			end
-
+			
+			
 			local timeLeft = ROUND_TIME
 			local adjustConn = iotAdjustMP.Event:Connect(function(delta)
 				timeLeft = math.clamp(timeLeft + delta, 0, 600)
@@ -122,10 +128,12 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 
 			table.sort(leaderboard, function(a, b) return a.score > b.score end)
 
-			local isDraw = (#leaderboard > 1) and (leaderboard[1].score == leaderboard[#leaderboard].score)
+			-- [FIX]: Check if the lowest score is shared by multiple players at the bottom
+			local lowestScore = (#leaderboard > 0) and leaderboard[#leaderboard].score or 0
+			local bottomTie = (#leaderboard > 1) and (leaderboard[#leaderboard - 1].score == lowestScore)
 			local eliminatedIndex = nil
 
-			if #leaderboard > 1 and not isDraw then
+			if #leaderboard > 1 and not bottomTie then
 				eliminatedIndex = #leaderboard
 				local eliminatedPlayer = leaderboard[eliminatedIndex].playerObj
 
@@ -140,8 +148,8 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 						eliminatedPlayer:LoadCharacter()
 					end
 				end)
-			elseif isDraw then
-				print("[Multiplayer] Round ended in a DRAW. No one eliminated.")
+			elseif bottomTie then
+				print("[Multiplayer] Tie for lowest score! No player eliminated this round.")
 			end
 
 			local isFinal = (#activePlayers <= 1)
@@ -162,7 +170,7 @@ function MultiplayerManager.StartMatch(allPlayers, hostPlayer)
 					displayName = entry.playerObj and entry.playerObj.DisplayName or entry.name,
 					score = entry.score,
 					isEliminated = (i == eliminatedIndex),
-					isDraw = isDraw
+					isDraw = bottomTie
 				})
 			end
 

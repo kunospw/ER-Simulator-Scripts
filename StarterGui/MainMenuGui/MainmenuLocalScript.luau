@@ -1,11 +1,11 @@
 -- MainMenu LocalScript
 -- Place inside: StarterGui → MainMenuGui → MainmenuLocalScript
 
-local Players              = game:GetService("Players")
+local Players               = game:GetService("Players")
 local TweenService         = game:GetService("TweenService")
-local RS                   = game:GetService("ReplicatedStorage")
+local RS                    = game:GetService("ReplicatedStorage")
 local ContextActionService = game:GetService("ContextActionService")
-local RunService           = game:GetService("RunService")
+local RunService            = game:GetService("RunService")
 
 local player        = Players.LocalPlayer
 local PlayerGui     = player.PlayerGui
@@ -33,7 +33,8 @@ local ScenarioList         = ScenarioChooserFrame:WaitForChild("ScenarioList")
 local PlayButton           = ContentPanel:WaitForChild("PlayButton")
 local SettingsButton       = ContentPanel:WaitForChild("SettingsButton")
 local MultiplayerButton    = ContentPanel:WaitForChild("MultiplayerButton")
-
+local RequestHistory = RS:WaitForChild("RequestHistory")
+local RequestSessionDetail = RS:WaitForChild("RequestSessionDetail")
 local TriggerCinematic = RS:WaitForChild("TriggerCinematic")
 local ScenarioData     = require(RS:WaitForChild("ScenarioData"))
 
@@ -45,6 +46,8 @@ local LeaveLobby    = RS:WaitForChild("LeaveLobby")
 local UpdateLobbies = RS:WaitForChild("UpdateLobbies")
 
 local cachedLobbies = {}
+local includeAiContent = true -- Host preference (ticked by default)
+
 local function getAvatarThumbnail(userId, imageLabel, size)
 	size = size or Enum.ThumbnailSize.Size48x48
 	task.spawn(function()
@@ -60,14 +63,10 @@ local function getAvatarThumbnail(userId, imageLabel, size)
 		end
 	end)
 end
-local currentView = "scenario" -- "scenario" | "multiplayer" | "credits"
+local currentView = "scenario" -- "scenario" | "multiplayer" | "credits" | "history" | "historyDetail"
 
 -- ── Menu Camera ───────────────────────────────────────────────────────────────
 local function startMenuCamera()
-	-- The MenuCamera part can stream in slightly after this script first runs, so
-	-- FindFirstChild would miss it and bail (that's why it only worked after a
-	-- respawn re-ran the script). WaitForChild waits for it instead. This runs in
-	-- a task.spawn, so waiting here doesn't block the rest of the menu.
 	local menuCameraPart = workspace:WaitForChild("MenuCamera", 10)
 	if not menuCameraPart then
 		warn("[MenuCamera] MenuCamera Part not found in Workspace after waiting!")
@@ -77,8 +76,6 @@ local function startMenuCamera()
 	local character = player.Character or player.CharacterAdded:Wait()
 	task.wait(1)
 
-	-- Read workspace.CurrentCamera live inside the loop so we always drive the
-	-- camera that's actually active (it can be replaced around the first spawn).
 	while not workspace.CurrentCamera do
 		task.wait()
 	end
@@ -197,7 +194,7 @@ local function expandCard(card, scenarioId)
 
 	local startBtn = card:FindFirstChild("StartButton")
 	if startBtn then
-		startBtn.Visible                = true
+		startBtn.Visible                 = true
 		startBtn.BackgroundTransparency = 1
 		startBtn.TextTransparency       = 1
 		task.delay(0.15, function()
@@ -381,7 +378,6 @@ local function showMultiplayerView()
 	if headerLabel then headerLabel.Text = "Multiplayer Lobbies" end
 
 	clearList()
-	-- [FIX]: Change Left to Center to perfectly pad the 1, -16 widths
 	cardLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
 	-- Check if player is currently in a lobby
@@ -397,12 +393,11 @@ local function showMultiplayerView()
 
 	if myLobby then
 		-- ── IN-LOBBY VIEW ──────────────────────────────────────────────────────
-
-		-- Header card
 		local headerCard = Instance.new("Frame")
 		headerCard.Size = UDim2.new(1, -16, 0, 50)
 		headerCard.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 		headerCard.BorderSizePixel = 0
+		headerCard.LayoutOrder = 1
 		headerCard.Parent = ScenarioList
 		Instance.new("UICorner", headerCard).CornerRadius = UDim.new(0, 8)
 
@@ -429,6 +424,7 @@ local function showMultiplayerView()
 		countLabel.Parent = headerCard
 
 		-- Player cards
+		local pOrder = 2
 		for _, pName in ipairs(myLobby.PlayerNames) do
 			local isHost = (pName == myLobby.HostName)
 			local isMe = (pName == player.Name)
@@ -439,10 +435,11 @@ local function showMultiplayerView()
 				and Color3.fromRGB(40, 45, 55)
 				or  Color3.fromRGB(30, 30, 30)
 			pCard.BorderSizePixel = 0
+			pCard.LayoutOrder = pOrder
+			pOrder += 1
 			pCard.Parent = ScenarioList
 			Instance.new("UICorner", pCard).CornerRadius = UDim.new(0, 8)
 
-			-- Avatar image
 			local avatarFrame = Instance.new("Frame")
 			avatarFrame.Size = UDim2.new(0, 36, 0, 36)
 			avatarFrame.Position = UDim2.new(0, 8, 0.5, -18)
@@ -454,11 +451,10 @@ local function showMultiplayerView()
 			local avatarImg = Instance.new("ImageLabel")
 			avatarImg.Size = UDim2.fromScale(1, 1)
 			avatarImg.BackgroundTransparency = 1
-			avatarImg.Image = "rbxassetid://0" -- placeholder
+			avatarImg.Image = "rbxassetid://0"
 			avatarImg.Parent = avatarFrame
 			Instance.new("UICorner", avatarImg).CornerRadius = UDim.new(1, 0)
 
-			-- Load avatar async
 			task.spawn(function()
 				local ok, uid = pcall(function()
 					return game:GetService("Players"):GetUserIdFromNameAsync(pName)
@@ -468,7 +464,6 @@ local function showMultiplayerView()
 				end
 			end)
 
-			-- Name + badge row
 			local nameLabel = Instance.new("TextLabel")
 			nameLabel.Text = pName .. (isMe and " (You)" or "")
 			nameLabel.TextSize = 13
@@ -509,14 +504,44 @@ local function showMultiplayerView()
 			end
 		end
 
-		-- Spacer
-		local spacer = Instance.new("Frame")
-		spacer.Size = UDim2.new(1, 0, 0, 4)
-		spacer.BackgroundTransparency = 1
-		spacer.Parent = ScenarioList
-
-		-- Start Match (host only)
+		-- Host controls: AI checkbox & Start Match
 		if myLobby.HostName == player.Name then
+			-- AI Generated Content Checkbox (Host only inside lobby)
+			local toggleFrame = Instance.new("Frame")
+			toggleFrame.Size = UDim2.new(1, -16, 0, 30)
+			toggleFrame.BackgroundTransparency = 1
+			toggleFrame.LayoutOrder = pOrder
+			pOrder += 1
+			toggleFrame.Parent = ScenarioList
+
+			local checkBox = Instance.new("TextButton")
+			checkBox.Size = UDim2.new(0, 22, 0, 22)
+			checkBox.Position = UDim2.new(0, 4, 0.5, -11)
+			checkBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+			checkBox.Text = includeAiContent and "✓" or ""
+			checkBox.TextColor3 = Color3.fromRGB(34, 197, 94)
+			checkBox.TextSize = 14
+			checkBox.Font = Enum.Font.GothamBold
+			checkBox.BorderSizePixel = 0
+			checkBox.Parent = toggleFrame
+			Instance.new("UICorner", checkBox).CornerRadius = UDim.new(0, 4)
+
+			local checkLabel = Instance.new("TextLabel")
+			checkLabel.Size = UDim2.new(1, -36, 1, 0)
+			checkLabel.Position = UDim2.new(0, 32, 0, 0)
+			checkLabel.BackgroundTransparency = 1
+			checkLabel.Text = "Include AI Generated Patients"
+			checkLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+			checkLabel.TextSize = 12
+			checkLabel.Font = Enum.Font.Gotham
+			checkLabel.TextXAlignment = Enum.TextXAlignment.Left
+			checkLabel.Parent = toggleFrame
+
+			checkBox.MouseButton1Click:Connect(function()
+				includeAiContent = not includeAiContent
+				checkBox.Text = includeAiContent and "✓" or ""
+			end)
+
 			local startBtn = Instance.new("TextButton")
 			startBtn.Text = "▶  Start Match"
 			startBtn.TextSize = 13
@@ -525,11 +550,13 @@ local function showMultiplayerView()
 			startBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
 			startBtn.Size = UDim2.new(1, -16, 0, 40)
 			startBtn.BorderSizePixel = 0
+			startBtn.LayoutOrder = pOrder
+			pOrder += 1
 			startBtn.Parent = ScenarioList
 			Instance.new("UICorner", startBtn).CornerRadius = UDim.new(0, 8)
+
 			startBtn.MouseButton1Click:Connect(function()
 				if myLobby.PlayerCount < 2 then
-					-- Toast: need more players
 					local toast = Instance.new("ScreenGui")
 					toast.ResetOnSpawn = false
 					toast.Parent = player.PlayerGui
@@ -552,7 +579,8 @@ local function showMultiplayerView()
 					task.delay(2.5, function() toast:Destroy() end)
 					return
 				end
-				RS:WaitForChild("StartMatch"):FireServer()
+				-- Sends preference to server when initiating start match
+				RS:WaitForChild("StartMatch"):FireServer(includeAiContent)
 			end)
 		end
 
@@ -565,6 +593,7 @@ local function showMultiplayerView()
 		leaveBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 		leaveBtn.Size = UDim2.new(1, -16, 0, 36)
 		leaveBtn.BorderSizePixel = 0
+		leaveBtn.LayoutOrder = pOrder
 		leaveBtn.Parent = ScenarioList
 		Instance.new("UICorner", leaveBtn).CornerRadius = UDim.new(0, 8)
 		leaveBtn.MouseButton1Click:Connect(function()
@@ -573,7 +602,6 @@ local function showMultiplayerView()
 
 	else
 		-- ── LOBBY LIST VIEW ────────────────────────────────────────────────────
-
 		local createBtn = Instance.new("TextButton")
 		createBtn.Text = "+ Create Lobby"
 		createBtn.TextSize = 13
@@ -582,13 +610,16 @@ local function showMultiplayerView()
 		createBtn.BackgroundColor3 = Color3.fromRGB(229, 57, 53)
 		createBtn.Size = UDim2.new(1, -16, 0, 40)
 		createBtn.BorderSizePixel = 0
+		createBtn.LayoutOrder = 1
 		createBtn.Parent = ScenarioList
 		Instance.new("UICorner", createBtn).CornerRadius = UDim.new(0, 8)
+
 		createBtn.MouseButton1Click:Connect(function()
 			CreateLobby:FireServer()
 		end)
 
 		local hasLobbies = false
+		local cardOrder = 2
 		for hostId, lobbyData in pairs(cachedLobbies) do
 			hasLobbies = true
 
@@ -596,10 +627,11 @@ local function showMultiplayerView()
 			card.Size = UDim2.new(1, -16, 0, 60)
 			card.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 			card.BorderSizePixel = 0
+			card.LayoutOrder = cardOrder
+			cardOrder += 1
 			card.Parent = ScenarioList
 			Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
 
-			-- Host avatar
 			local avatarFrame = Instance.new("Frame")
 			avatarFrame.Size = UDim2.new(0, 38, 0, 38)
 			avatarFrame.Position = UDim2.new(0, 10, 0.5, -19)
@@ -615,7 +647,6 @@ local function showMultiplayerView()
 			avatarImg.Parent = avatarFrame
 			Instance.new("UICorner", avatarImg).CornerRadius = UDim.new(1, 0)
 
-			-- Load avatar
 			task.spawn(function()
 				local ok, uid = pcall(function()
 					return game:GetService("Players"):GetUserIdFromNameAsync(lobbyData.HostName)
@@ -625,7 +656,6 @@ local function showMultiplayerView()
 				end
 			end)
 
-			-- Host name
 			local hostLabel = Instance.new("TextLabel")
 			hostLabel.Text = "👑 " .. lobbyData.HostName .. "'s Lobby"
 			hostLabel.TextSize = 13
@@ -637,7 +667,6 @@ local function showMultiplayerView()
 			hostLabel.TextXAlignment = Enum.TextXAlignment.Left
 			hostLabel.Parent = card
 
-			-- Player count
 			local countLabel = Instance.new("TextLabel")
 			countLabel.Text = lobbyData.PlayerCount .. "/" .. lobbyData.MaxPlayers .. " players"
 			countLabel.TextSize = 11
@@ -649,7 +678,6 @@ local function showMultiplayerView()
 			countLabel.TextXAlignment = Enum.TextXAlignment.Left
 			countLabel.Parent = card
 
-			-- Join button
 			local joinBtn = Instance.new("TextButton")
 			joinBtn.Text = "Join"
 			joinBtn.TextSize = 12
@@ -674,6 +702,7 @@ local function showMultiplayerView()
 			noLobbyLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
 			noLobbyLabel.BackgroundTransparency = 1
 			noLobbyLabel.Size = UDim2.new(1, -16, 0, 40)
+			noLobbyLabel.LayoutOrder = 2
 			noLobbyLabel.TextXAlignment = Enum.TextXAlignment.Center
 			noLobbyLabel.Parent = ScenarioList
 		end
@@ -681,9 +710,6 @@ local function showMultiplayerView()
 end
 
 -- ── Credits view ──────────────────────────────────────────────────────────────
--- Reuses the same sliding panel as Scenario / Multiplayer; only the ScenarioList
--- contents change. For now this is a stand-in for Settings (the game has no audio
--- yet, so there's nothing to configure). Edit the `team` table and footer below.
 local function showCreditsView()
 	local headerLabel = Header:FindFirstChildWhichIsA("TextLabel")
 	if headerLabel then headerLabel.Text = "Settings" end
@@ -691,7 +717,6 @@ local function showCreditsView()
 	clearList()
 	cardLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-	-- Project title card
 	local titleCard = Instance.new("Frame")
 	titleCard.Size            = UDim2.new(1, -16, 0, 72)
 	titleCard.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
@@ -729,7 +754,6 @@ local function showCreditsView()
 	gameSub.TextXAlignment         = Enum.TextXAlignment.Left
 	gameSub.Parent                 = titleCard
 
-	-- Section label
 	local sectionLabel = Instance.new("TextLabel")
 	sectionLabel.Text                   = "DEVELOPED BY"
 	sectionLabel.TextSize               = 10
@@ -740,7 +764,6 @@ local function showCreditsView()
 	sectionLabel.TextXAlignment         = Enum.TextXAlignment.Left
 	sectionLabel.Parent                 = ScenarioList
 
-	-- ── Edit team members here ───────────────────────────────────────────────
 	local team = {
 		{ name = "Dyah Puspo Rini", role = "Game Design · UI · Environment" },
 		{ name = "Denzel Huang",          role = "Multiplayer · Scripting" },
@@ -778,7 +801,6 @@ local function showCreditsView()
 		roleLabel.Parent                 = pCard
 	end
 
-	-- Footer card
 	local footer = Instance.new("Frame")
 	footer.Size            = UDim2.new(1, -16, 0, 44)
 	footer.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
@@ -797,17 +819,329 @@ local function showCreditsView()
 	footerLabel.Parent                 = footer
 end
 
+-- ── History view (List of past sessions) ─────────────────────────────────────
+-- Mirrors showCreditsView(): reuses ScenarioChooserFrame + clearList() + cardLayout.
+local gameModeLabels = {
+	Scenario    = "Scenario",
+	Endless     = "Endless",
+	Multiplayer = "Multiplayer",
+}
+
+local gameModeColors = {
+	Scenario    = Color3.fromRGB(59, 130, 246),
+	Endless     = Color3.fromRGB(168, 85, 247),
+	Multiplayer = Color3.fromRGB(229, 57, 53),
+}
+
+local function formatHistoryDate(timestamp)
+	if not timestamp then return "" end
+	local ok, result = pcall(function()
+		return os.date("%d %b, %H:%M", timestamp)
+	end)
+	return ok and result or ""
+end
+
+local function getScenarioTitle(scenarioId)
+	if scenarioId == "endless" or scenarioId == "" or not scenarioId then
+		return nil
+	end
+	local scenario = ScenarioData.GetScenario(scenarioId)
+	return scenario and scenario.title or scenarioId
+end
+
+-- Forward declaration: showHistoryView() memanggil showSessionDetailView() yang
+-- didefinisikan di bawahnya. Local ini dideklarasi lebih dulu supaya closure di
+-- showHistoryView() menangkapnya sebagai upvalue yang sah, bukan global.
+local showSessionDetailView
+
+local function buildHistoryCard(entry, onOpen)
+	local card = Instance.new("Frame")
+	card.Size             = UDim2.new(1, -16, 0, 78)
+	card.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	card.BorderSizePixel  = 0
+	card.ClipsDescendants = true
+	card.Parent           = ScenarioList
+	Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+
+	local bar = Instance.new("Frame")
+	bar.Size             = UDim2.new(0, 4, 1, -16)
+	bar.Position          = UDim2.new(0, 8, 0, 8)
+	bar.BackgroundColor3 = gameModeColors[entry.gameMode] or Color3.fromRGB(120, 120, 120)
+	bar.BorderSizePixel  = 0
+	bar.Parent           = card
+	Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 4)
+
+	local titleText = getScenarioTitle(entry.scenarioId) or gameModeLabels[entry.gameMode] or "Sesi"
+	local title = Instance.new("TextLabel")
+	title.Text                   = titleText
+	title.TextSize               = 14
+	title.Font                   = Enum.Font.GothamBold
+	title.TextColor3             = Color3.new(1, 1, 1)
+	title.BackgroundTransparency = 1
+	title.Size                   = UDim2.new(1, -90, 0, 20)
+	title.Position               = UDim2.new(0, 22, 0, 10)
+	title.TextXAlignment         = Enum.TextXAlignment.Left
+	title.TextTruncate           = Enum.TextTruncate.AtEnd
+	title.Parent                 = card
+
+	local subtitle = Instance.new("TextLabel")
+	subtitle.Text                   = (gameModeLabels[entry.gameMode] or "Sesi") .. " · " .. formatHistoryDate(entry.playedAt)
+	subtitle.TextSize               = 11
+	subtitle.Font                   = Enum.Font.Gotham
+	subtitle.TextColor3             = Color3.fromRGB(150, 150, 150)
+	subtitle.BackgroundTransparency = 1
+	subtitle.Size                   = UDim2.new(1, -90, 0, 16)
+	subtitle.Position               = UDim2.new(0, 22, 0, 32)
+	subtitle.TextXAlignment         = Enum.TextXAlignment.Left
+	subtitle.Parent                 = card
+
+	local scoreLabel = Instance.new("TextLabel")
+	scoreLabel.Text                   = tostring(entry.score or 0)
+	scoreLabel.TextSize               = 18
+	scoreLabel.Font                   = Enum.Font.GothamBold
+	scoreLabel.TextColor3             = Color3.new(1, 1, 1)
+	scoreLabel.BackgroundTransparency = 1
+	scoreLabel.Size                   = UDim2.new(0, 60, 0, 24)
+	scoreLabel.Position               = UDim2.new(1, -76, 0, 10)
+	scoreLabel.TextXAlignment         = Enum.TextXAlignment.Right
+	scoreLabel.Parent                 = card
+
+	local correctCount = entry.correctCount or 0
+	local wrongCount    = entry.wrongCount or 0
+	local statsText = string.format("✓ %d   ✗ %d   %d%%",
+		correctCount, wrongCount, math.floor((entry.accuracy or 0) + 0.5))
+
+	local stats = Instance.new("TextLabel")
+	stats.Text                   = statsText
+	stats.TextSize               = 11
+	stats.Font                   = Enum.Font.Gotham
+	stats.TextColor3             = Color3.fromRGB(160, 160, 160)
+	stats.BackgroundTransparency = 1
+	stats.Size                   = UDim2.new(1, -22, 0, 16)
+	stats.Position               = UDim2.new(0, 22, 0, 54)
+	stats.TextXAlignment         = Enum.TextXAlignment.Left
+	stats.Parent                 = card
+
+	-- [NEW]: Overlay klik supaya seluruh card bisa dipencet untuk buka detail.
+	local clickOverlay = Instance.new("TextButton")
+	clickOverlay.Text                   = ""
+	clickOverlay.Size                   = UDim2.fromScale(1, 1)
+	clickOverlay.BackgroundTransparency = 1
+	clickOverlay.ZIndex                 = 5
+	clickOverlay.Parent                 = card
+	clickOverlay.MouseButton1Click:Connect(function()
+		if onOpen then onOpen(entry) end
+	end)
+end
+
+local function showHistoryView()
+	local headerLabel = Header:FindFirstChildWhichIsA("TextLabel")
+	if headerLabel then headerLabel.Text = "History" end
+
+	clearList()
+	cardLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+
+	-- Loading placeholder while InvokeServer resolves
+	local loadingLabel = Instance.new("TextLabel")
+	loadingLabel.Name                   = "LoadingLabel"
+	loadingLabel.Text                   = "Memuat riwayat..."
+	loadingLabel.TextSize               = 13
+	loadingLabel.Font                   = Enum.Font.Gotham
+	loadingLabel.TextColor3             = Color3.fromRGB(140, 140, 140)
+	loadingLabel.BackgroundTransparency = 1
+	loadingLabel.Size                   = UDim2.new(1, -16, 0, 40)
+	loadingLabel.Parent                 = ScenarioList
+
+	task.spawn(function()
+		local ok, history = pcall(function()
+			return RequestHistory:InvokeServer()
+		end)
+
+		-- Bail if the player already navigated away before the invoke returned.
+		if currentView ~= "history" then return end
+
+		clearList()
+
+		if not ok or not history or #history == 0 then
+			local emptyLabel = Instance.new("TextLabel")
+			emptyLabel.Text                   = "Belum ada riwayat sesi.\nMainkan skenario untuk mulai mencatat."
+			emptyLabel.TextSize               = 13
+			emptyLabel.Font                   = Enum.Font.Gotham
+			emptyLabel.TextColor3             = Color3.fromRGB(130, 130, 130)
+			emptyLabel.BackgroundTransparency = 1
+			emptyLabel.Size                   = UDim2.new(1, -16, 0, 60)
+			emptyLabel.TextXAlignment         = Enum.TextXAlignment.Center
+			emptyLabel.TextYAlignment         = Enum.TextYAlignment.Center
+			emptyLabel.TextWrapped            = true
+			emptyLabel.Parent                 = ScenarioList
+			return
+		end
+
+		for _, entry in ipairs(history) do
+			buildHistoryCard(entry, function(clickedEntry)
+				currentView = "historyDetail"
+				showSessionDetailView(clickedEntry)
+			end)
+		end
+	end)
+end
+
+-- ── Session Detail view (per-patient breakdown) ──────────────────────────────
+local triageColors = {
+	RED    = Color3.fromRGB(239, 68, 68),
+	YELLOW = Color3.fromRGB(234, 179, 8),
+	GREEN  = Color3.fromRGB(34, 197, 94),
+	BLACK  = Color3.fromRGB(90, 90, 90),
+	TIMEOUT = Color3.fromRGB(120, 120, 120),
+}
+
+local function buildDecisionRow(decision, index)
+	local row = Instance.new("Frame")
+	row.Size             = UDim2.new(1, -16, 0, 56)
+	row.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+	row.BorderSizePixel  = 0
+	row.Parent            = ScenarioList
+	Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+
+	local idLabel = Instance.new("TextLabel")
+	idLabel.Text                   = "P" .. string.format("%02d", index)
+	idLabel.TextSize               = 11
+	idLabel.Font                   = Enum.Font.GothamBold
+	idLabel.TextColor3             = Color3.fromRGB(130, 130, 130)
+	idLabel.BackgroundTransparency = 1
+	idLabel.Size                   = UDim2.new(0, 32, 1, 0)
+	idLabel.Position               = UDim2.new(0, 10, 0, 0)
+	idLabel.TextXAlignment         = Enum.TextXAlignment.Left
+	idLabel.Parent                 = row
+
+	local chosenText = decision.chosen or "-"
+	local chosenBadge = Instance.new("TextLabel")
+	chosenBadge.Text                   = chosenText
+	chosenBadge.TextSize               = 10
+	chosenBadge.Font                   = Enum.Font.GothamBold
+	chosenBadge.TextColor3             = Color3.new(1, 1, 1)
+	chosenBadge.BackgroundColor3       = triageColors[chosenText] or Color3.fromRGB(80, 80, 80)
+	chosenBadge.Size                   = UDim2.new(0, 62, 0, 20)
+	chosenBadge.Position               = UDim2.new(0, 48, 0, 8)
+	chosenBadge.BorderSizePixel        = 0
+	chosenBadge.Parent                 = row
+	Instance.new("UICorner", chosenBadge).CornerRadius = UDim.new(0, 4)
+
+	local arrow = Instance.new("TextLabel")
+	arrow.Text                   = "→"
+	arrow.TextSize               = 12
+	arrow.Font                   = Enum.Font.Gotham
+	arrow.TextColor3             = Color3.fromRGB(100, 100, 100)
+	arrow.BackgroundTransparency = 1
+	arrow.Size                   = UDim2.new(0, 16, 0, 20)
+	arrow.Position               = UDim2.new(0, 116, 0, 8)
+	arrow.Parent                 = row
+
+	local correctBadge = Instance.new("TextLabel")
+	correctBadge.Text                   = decision.correct or "-"
+	correctBadge.TextSize               = 10
+	correctBadge.Font                   = Enum.Font.GothamBold
+	correctBadge.TextColor3             = Color3.new(1, 1, 1)
+	correctBadge.BackgroundColor3       = triageColors[decision.correct] or Color3.fromRGB(80, 80, 80)
+	correctBadge.Size                   = UDim2.new(0, 62, 0, 20)
+	correctBadge.Position               = UDim2.new(0, 138, 0, 8)
+	correctBadge.BorderSizePixel        = 0
+	correctBadge.Parent                 = row
+	Instance.new("UICorner", correctBadge).CornerRadius = UDim.new(0, 4)
+
+	local diagLabel = Instance.new("TextLabel")
+	diagLabel.Text                   = decision.diagnosis or ""
+	diagLabel.TextSize               = 10
+	diagLabel.Font                   = Enum.Font.Gotham
+	diagLabel.TextColor3             = Color3.fromRGB(130, 130, 130)
+	diagLabel.BackgroundTransparency = 1
+	diagLabel.Size                   = UDim2.new(1, -220, 0, 16)
+	diagLabel.Position               = UDim2.new(0, 48, 0, 32)
+	diagLabel.TextXAlignment         = Enum.TextXAlignment.Left
+	diagLabel.TextTruncate           = Enum.TextTruncate.AtEnd
+	diagLabel.Parent                 = row
+
+	local pointsLabel = Instance.new("TextLabel")
+	local points = decision.points or 0
+	pointsLabel.Text                   = (decision.isCorrect and "+" or "") .. tostring(points)
+	pointsLabel.TextSize               = 13
+	pointsLabel.Font                   = Enum.Font.GothamBold
+	pointsLabel.TextColor3             = decision.isCorrect
+		and Color3.fromRGB(34, 197, 94) or Color3.fromRGB(239, 68, 68)
+	pointsLabel.BackgroundTransparency = 1
+	pointsLabel.Size                   = UDim2.new(0, 50, 0, 20)
+	pointsLabel.Position               = UDim2.new(1, -60, 0, 8)
+	pointsLabel.TextXAlignment         = Enum.TextXAlignment.Right
+	pointsLabel.Parent                 = row
+
+	local timeLabel = Instance.new("TextLabel")
+	timeLabel.Text                   = decision.responseTime or ""
+	timeLabel.TextSize               = 10
+	timeLabel.Font                   = Enum.Font.Gotham
+	timeLabel.TextColor3             = Color3.fromRGB(110, 110, 110)
+	timeLabel.BackgroundTransparency = 1
+	timeLabel.Size                   = UDim2.new(0, 50, 0, 16)
+	timeLabel.Position               = UDim2.new(1, -60, 0, 30)
+	timeLabel.TextXAlignment         = Enum.TextXAlignment.Right
+	timeLabel.Parent                 = row
+end
+
+showSessionDetailView = function(entry)
+	local headerLabel = Header:FindFirstChildWhichIsA("TextLabel")
+	local titleText = getScenarioTitle(entry.scenarioId) or gameModeLabels[entry.gameMode] or "Detail"
+	if headerLabel then headerLabel.Text = titleText end
+
+	clearList()
+	cardLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+
+	local loadingLabel = Instance.new("TextLabel")
+	loadingLabel.Text                   = "Memuat detail..."
+	loadingLabel.TextSize               = 13
+	loadingLabel.Font                   = Enum.Font.Gotham
+	loadingLabel.TextColor3             = Color3.fromRGB(140, 140, 140)
+	loadingLabel.BackgroundTransparency = 1
+	loadingLabel.Size                   = UDim2.new(1, -16, 0, 40)
+	loadingLabel.Parent                 = ScenarioList
+
+	task.spawn(function()
+		local ok, session = pcall(function()
+			return RequestSessionDetail:InvokeServer(entry.sessionKey)
+		end)
+
+		if currentView ~= "historyDetail" then return end
+
+		clearList()
+
+		local decisions = ok and session and session.decisions or nil
+
+		if not decisions or #decisions == 0 then
+			local emptyLabel = Instance.new("TextLabel")
+			emptyLabel.Text                   = "Tidak ada data breakdown untuk sesi ini."
+			emptyLabel.TextSize               = 13
+			emptyLabel.Font                   = Enum.Font.Gotham
+			emptyLabel.TextColor3             = Color3.fromRGB(130, 130, 130)
+			emptyLabel.BackgroundTransparency = 1
+			emptyLabel.Size                   = UDim2.new(1, -16, 0, 60)
+			emptyLabel.TextXAlignment         = Enum.TextXAlignment.Center
+			emptyLabel.TextWrapped            = true
+			emptyLabel.Parent                 = ScenarioList
+			return
+		end
+
+		for i, decision in ipairs(decisions) do
+			buildDecisionRow(decision, i)
+		end
+	end)
+end
+
 UpdateLobbies.OnClientEvent:Connect(function(lobbiesDict)
 	cachedLobbies = lobbiesDict
 	if currentView == "multiplayer" then
 		showMultiplayerView()
 	end
 end)
--- ── Entry animation ───────────────────────────────────────────────────────────
-MainMenuFrame.BackgroundTransparency = 1
-RequestLobbies:FireServer()
-task.wait(0.3)
 
+-- ── Scenario View Helper ──────────────────────────────────────────────────────
 local function showScenarioView()
 	local headerLabel = Header:FindFirstChildWhichIsA("TextLabel")
 	if headerLabel then headerLabel.Text = "Choose Scenario" end
@@ -832,6 +1166,7 @@ end)
 
 MultiplayerButton.MouseButton1Click:Connect(function()
 	currentView = "multiplayer"
+	RequestLobbies:FireServer()
 	showMultiplayerView()
 	slideToScenarios()
 end)
@@ -842,7 +1177,21 @@ SettingsButton.MouseButton1Click:Connect(function()
 	slideToScenarios()
 end)
 
+local HistoryButton = ContentPanel:WaitForChild("HistoryButton")
+
+HistoryButton.MouseButton1Click:Connect(function()
+	currentView = "history"
+	showHistoryView()
+	slideToScenarios()
+end)
+
 BackButton.MouseButton1Click:Connect(function()
+	if currentView == "historyDetail" then
+		currentView = "history"
+		showHistoryView()
+		return
+	end
+
 	if selectedCard then
 		collapseCard(selectedCard)
 		selectedCard       = nil
@@ -851,9 +1200,9 @@ BackButton.MouseButton1Click:Connect(function()
 	slideToMainMenu()
 	currentView = "scenario"
 end)
-
 -- ── Entry animation ───────────────────────────────────────────────────────────
 MainMenuFrame.BackgroundTransparency = 1
+RequestLobbies:FireServer()
 task.wait(0.3)
 TweenService:Create(MainMenuFrame,
 	TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
@@ -886,7 +1235,7 @@ timerText.TextSize = 18
 timerText.Text = "01:00"
 timerText.Parent = timerFrame
 
-local currentTimerSequence = 0 -- [FIX]: Tracks the active loop to kill it safely
+local currentTimerSequence = 0
 
 MatchStarted.OnClientEvent:Connect(function(duration)
 	MainMenuGui.Enabled = false
@@ -896,13 +1245,12 @@ MatchStarted.OnClientEvent:Connect(function(duration)
 	currentTimerSequence += 1
 	local mySequence = currentTimerSequence
 
-	player:SetAttribute("MPTimerDelta", 0) -- reset delta tiap round baru
+	player:SetAttribute("MPTimerDelta", 0)
 
 	timerFrame.Visible = true
 	local timeLeft = duration
 
 	while timeLeft >= 0 and currentTimerSequence == mySequence do
-		-- Cek IoT delta
 		local delta = player:GetAttribute("MPTimerDelta") or 0
 		if delta ~= 0 then
 			timeLeft = math.clamp(timeLeft + delta, 0, 600)
@@ -933,7 +1281,6 @@ iotGlobalTimerRemote.OnClientEvent:Connect(function(delta)
 	player:SetAttribute("MPTimerDelta", (player:GetAttribute("MPTimerDelta") or 0) + delta)
 end)
 
--- [FIX]: When the match ends (or someone gets eliminated), kill their timer instantly
 MatchEnded.OnClientEvent:Connect(function()
 	currentTimerSequence += 1 
 	timerFrame.Visible = false
